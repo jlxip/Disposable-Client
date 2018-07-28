@@ -21,7 +21,7 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="0" rowspan="4">
+   <item row="1" column="0" rowspan="2">
     <widget class="QListView" name="chatslist">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
@@ -29,17 +29,26 @@
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-    </widget>
-   </item>
-   <item row="0" column="2" rowspan="4" colspan="2">
-    <widget class="QListView" name="messages">
-     <property name="enabled">
-      <bool>false</bool>
+     <property name="frameShape">
+      <enum>QFrame::Box</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Plain</enum>
      </property>
     </widget>
    </item>
-   <item row="4" column="2" colspan="2">
+   <item row="2" column="2" colspan="2">
     <widget class="QLineEdit" name="writemsg">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="placeholderText">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="2" rowspan="2" colspan="2">
+    <widget class="QTextBrowser" name="messages">
      <property name="enabled">
       <bool>false</bool>
      </property>

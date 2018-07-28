@@ -11,6 +11,8 @@ identity_ui = uic.loadUiType(UIdirectory+'identity.ui')[0]
 invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
 identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 
+UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
+
 def connectToNode():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	try:
@@ -40,7 +42,7 @@ def authenticate(CID, priv):
 	try:
 		s, thisAES, thisIV = keyExchange()
 	except:
-		print 'Something went horribly wrong.'
+		print 'Something went horribly wrong (AUTH).'
 		exit()
 	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x01'))
 	if not cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == 'OK':
@@ -71,7 +73,7 @@ class listenThread(QtCore.QThread):
 	def run(self):
 		s, result, thisAES, thisIV = authenticate(self.parent.ME, self.parent.PRIV)
 		if not result:
-			print 'Something went horribly wrong.'
+			print 'Something went horribly wrong (LISTEN).'
 			exit()
 		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x00'))
 
@@ -84,12 +86,13 @@ class listenThread(QtCore.QThread):
 			self.emit(self.signal, r)
 
 class identitytab(QtGui.QWidget, identity_ui):
-	def __init__(self, CID, PRIV):
+	def __init__(self, ME, PRIV, ALIAS):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
 		self.newchat_btn.clicked.connect(self.newchat)
-		self.ME = CID
+		self.ME = ME
 		self.PRIV = PRIV
+		self.ALIAS = ALIAS
 		self.chatslist.doubleClicked.connect(self.chatsListClicked)
 		self.chatslist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
@@ -97,13 +100,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
 		if not _result:
-			print 'Something went horribly wrong.'
+			print 'Something went horribly wrong (NOT-AUTHENTICATE).'
 			exit()
 		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, '\x01'))
 
 		self.updateChatsList()
 
-		#Thread(target=self.listen, args=(self.ME, self.PRIV)).start()
 		thread = listenThread(self)
 		self.connect(thread, thread.signal, self.messageReceived)
 		thread.start()
@@ -111,28 +113,34 @@ class identitytab(QtGui.QWidget, identity_ui):
 	def chatsListClicked(self):
 		self.messages.setEnabled(True)
 		self.writemsg.setEnabled(True)
+		self.writemsg.setPlaceholderText('Write something to '+self.chats[self.chatslist.selectedIndexes()[0].row()][1])
 
 		self.updateMessages()
 
 	def updateMessages(self):
-		selected = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+		selected = self.chats[self.chatslist.selectedIndexes()[0].row()]
+		chat = selected[0]
 
 		# Get messages from the database
 		global DB
 		cursor = DB.cursor()
 		messages = []
 		# WARNING: IT NEEDS A FUCKING LIMIT
-		for i in cursor.execute("SELECT CONTENT, TIMESTAMP FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, selected)):
-			messages.append([i[0], i[1]])
+		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
+			messages.append(i)
 
 		# Show messages in 'messages' (QListView)
-		model = QtGui.QStandardItemModel()
+
+		show = []
 		for i in messages:
-			shown = '[%i] %s' % (i[1], i[0])
-			item = QtGui.QStandardItem(shown)
-			item.setEditable(False)
-			model.appendRow(item)
-		self.messages.setModel(model)
+			who = self.ALIAS if i[1] == 0 else selected[1]
+			shown = '[%s] <%s> %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, i[2])
+			show.append(shown)
+		self.messages.setPlainText('\n'.join(show))
+
+		# Scroll to the bottom
+		self.messages.moveCursor(QtGui.QTextCursor.End)
+		self.messages.ensureCursorVisible()
 
 	def updateChatsList(self, thisDB=None):
 		self.chats = []
@@ -147,7 +155,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 			# Get the public key of this chat
 			s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
 			if not result:
-				print 'Something went horribly wrong.'
+				print 'Something went horribly wrong (UPDATE-CHATS).'
 				exit()
 			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
 			PUB = cryptic.getRSACipher(cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)))
@@ -261,8 +269,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		# Insert the message into the database
 		global DB
 		cursor = DB.cursor()
-		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (self.ME, msg_to, time.time(), _))
+		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_to, time.time(), 0, _))
 		DB.commit()
+
+		self.writemsg.setText('')
 
 		self.updateMessages()	# Update the chat
 
@@ -272,9 +282,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		r = r.split('|')
 		msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), base64.b64decode(r[2]), base64.b64decode(r[3])
 
-		# First of all, msg_time is in UTC.
-		# Calculate the difference from UTC and apply it to the received time.
-		UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
+		# As msg_time is in UTC, apply the difference to UTC (calculated at the beginning of the execution) to the received time.
 		msg_time += UTC_diff
 
 		# 'msg_key' is encrypted with our public key. So, decrypt it with our private key.
@@ -285,7 +293,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
 
 		# Insert into the database
-		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (self.ME, msg_from, msg_time, msg_content))
+		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_from, msg_time, 1, msg_content))
 
 		# If the identity who sent the message is not in CHATS, insert it.
 		isInChats = False
@@ -295,7 +303,13 @@ class identitytab(QtGui.QWidget, identity_ui):
 			cursor.execute("INSERT INTO CHATS (ME, THEY, ALIAS, LAST) VALUES (?, ?, ?, ?)", (self.ME, msg_from, msg_from.upper()[:8], msg_time))
 
 		DB.commit()
-		self.updateChatsList()
+
+		# If the chat is open, update it
+		try:
+			if self.chats[self.chatslist.selectedIndexes()[0].row()][0] == msg_from:
+				self.updateMessages()
+		except:
+			pass
 
 class identityhash(QtGui.QDialog, identityhash_ui):
 	def __init__(self, parent, CID):
@@ -344,7 +358,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
 			if self.identities[i][3]:
 				ALIAS = self.identities[i][2]
-				tab = identitytab(self.identities[i][0], self.identities[i][1])
+				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS)
 			else:
 				ALIAS = '[INVALID] '+self.identities[i][2]
 				tab = invalidtab()
@@ -354,12 +368,12 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		try:
 			s, thisAES, thisIV = keyExchange()
 		except:
-			print 'Something went horribly wrong.'
+			print 'Something went horribly wrong (NO-KEY-EXCHANGE).'
 			exit()
 
 		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x00'))
 		if not cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == '\x00':
-			print 'Something went horribly wrong.'
+			print 'Something went horribly wrong (BAD-PROTOCOL).'
 			exit()
 		while True:
 			priv, pub = cryptic.genPairOfKeys()
@@ -460,7 +474,7 @@ if __name__ == '__main__':
 		# If the tables do not exist, create them
 		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'PRIV' TEXT, 'ALIAS' TEXT)")
 		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
-		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'CONTENT' TEXT)")
+		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
 		DB.commit()
 
 	# Start the application

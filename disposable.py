@@ -109,21 +109,20 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.move(frameGm.topLeft())
 
 	def loadIdentities(self):
-		# Read the CIDs from the file
+		# Read the CIDs from database
 		self.identities = []
-		if os.path.isfile('CIDs.dat'):
-			with open('CIDs.dat', 'r') as f:
-				CIDs = [i for i in f.read().split('\n') if not i == '']
-				for i in CIDs:
-					CID = i.split(':')[0]
-					PRIV = base64.b64decode(i.split(':')[1])
-					ALIAS = base64.b64decode(i.split(':')[2])
+		global DB
+		cursor = DB.cursor()
+		for i in cursor.execute("SELECT CID, PRIV, ALIAS FROM IDENTITIES"):
+			CID = i[0]
+			PRIV = i[1]
+			ALIAS = i[2]
 
-					# Check if it's possible to authenticate
-					s, result, thisAES, thisIV = authenticate(CID, PRIV)
-					if s:
-						s.close()
-					self.identities.append([CID, PRIV, ALIAS, result])
+			# Check if it's possible to authenticate
+			s, result, thisAES, thisIV = authenticate(CID, PRIV)
+			if s:
+				s.close()
+			self.identities.append([CID, PRIV, ALIAS, result])
 
 		# Add the tabs that are not already there (weird)
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
@@ -155,15 +154,11 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 				break
 		s.close()
 
-		# Append identity to the file
-		towrite = ''
-		if os.path.isfile('CIDs.dat'):
-			with open('CIDs.dat', 'r') as f:
-				towrite = f.read()
-			towrite += '\n'
-		towrite += CID+':'+base64.b64encode(priv)+':'+base64.b64encode(CID.upper()[:8])
-		with open('CIDs.dat', 'w') as f:
-			f.write(towrite)
+		# Insert into database
+		global DB
+		cursor = DB.cursor()
+		cursor.execute("INSERT INTO IDENTITIES (CID, PRIV, ALIAS) VALUES (?, ?, ?)", (CID, priv, CID.upper()[:8]))
+		DB.commit()
 
 		# Everything went fine. Update the identities and close the window.
 		self.loadIdentities()
@@ -173,18 +168,6 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.showaddress_btn.setEnabled(not i == 0)
 		self.renameidentity_btn.setEnabled(not i == 0)
 		self.deleteidentity_btn.setEnabled(not i == 0)
-
-	def updateIdentitiesFile(self):
-		towrite = ''
-		for i in self.identities:
-			towrite += i[0]
-			towrite += ':'
-			towrite += base64.b64encode(i[1])
-			towrite += ':'
-			towrite += base64.b64encode(i[2])
-			towrite += '\n'
-		with open('CIDs.dat', 'w') as f:
-			f.write(towrite)
 
 	def showaddress(self):
 		CID = self.identities[self.identitiestab.currentIndex()-1][0]
@@ -197,7 +180,13 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 			return
 		self.identities[k][2] = ALIAS
 		self.identitiestab.setTabText(k+1, ALIAS)	# Rename the tab.
-		self.updateIdentitiesFile()	# Update the file
+
+		# Update the row in the database
+		CID = self.identities[k][0]
+		global DB
+		cursor = DB.cursor()
+		cursor.execute("UPDATE IDENTITIES SET ALIAS=? WHERE CID=?", (ALIAS, CID))
+		DB.commit()
 
 	def deleteidentity(self):
 		# Sure?
@@ -221,8 +210,14 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 			# Otherwise, it's already deleted in the node
 
 			self.identitiestab.removeTab(k+1)	# Remove tab
+			CID = self.identities[k][0]
 			self.identities.pop(k)	# Remove from identities
-			self.updateIdentitiesFile()	# Update the file
+
+			# Remove from database
+			global DB
+			cursor = DB.cursor()
+			cursor.execute("DELETE FROM IDENTITIES WHERE CID=?", (CID,))
+			DB.commit()
 
 if __name__ == '__main__':
 	# Load the node data
@@ -236,6 +231,22 @@ if __name__ == '__main__':
 	NODE_PUB = NODE[NODE.find('\n')+1:]
 	NODE = [NODE_CONNECTION[0], int(NODE_CONNECTION[1]), NODE_PUB]
 
+	# Connect to database
+	global DB
+	DB = sqlite3.connect('database')
+
+	# Initialize database
+	cursor = DB.cursor()
+	areTablesThere = False
+	for i in cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='IDENTITIES'"):
+		areTablesThere = True	# The tables already exist
+	if not areTablesThere:
+		# If the tables do not exist, create them
+		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'PRIV' TEXT, 'ALIAS' TEXT)")
+		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT)")
+		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' TEXT, 'CONTENT' TEXT)")
+		DB.commit()
+
 	# Start the application
 	app = QtGui.QApplication(sys.argv)
 	w = mainwindow()
@@ -244,22 +255,6 @@ if __name__ == '__main__':
 	tmp = connectToNode()
 	data.send_msg(tmp, '\x00')
 	tmp.close()
-
-	# Connect to database
-	global DB
-	DB = sqlite3.connect('database')
-
-	# Initialize database
-	cursor = DB.cursor()
-	areTablesThere = False
-	for i in cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='identities'"):
-		areTablesThere = True	# The tables already exist
-	if not areTablesThere:
-		# If the tables do not exist, create them
-		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'PUB' TEXT, 'ALIAS' TEXT)")
-		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT)")
-		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' TEXT, 'CONTENT' TEXT)")
-		DB.commit()
 
 	# Show the window
 	w.show()

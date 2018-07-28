@@ -44,10 +44,7 @@ def authenticate(CID, priv):
 	except:
 		print 'Something went horribly wrong (AUTH).'
 		exit()
-	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x01'))
-	if not cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == 'OK':
-		return (None, False, None, None)
-	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, CID))
+	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x01'+CID))
 	random = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
 	if random == '\x01':
 		return (None, False, None, None)

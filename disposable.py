@@ -142,14 +142,17 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.messages.moveCursor(QtGui.QTextCursor.End)
 		self.messages.ensureCursorVisible()
 
-	def updateChatsList(self, thisDB=None):
+	def updateChatsList(self):
+		# Get the currently selected chat, so that it can be kept
+		try:
+			currentlyselected = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+		except:
+			currentlyselected = None
+
 		self.chats = []
 
 		# Load chats from database
-		if thisDB == None:
-			global DB
-		else:
-			DB = thisDB
+		global DB
 		cursor = DB.cursor()
 		for i in cursor.execute("SELECT THEY, ALIAS FROM CHATS WHERE ME=? ORDER BY LAST DESC", (self.ME,)):
 			# Get the public key of this chat
@@ -171,6 +174,16 @@ class identitytab(QtGui.QWidget, identity_ui):
 			item.setFont(QtGui.QFont('Sans', 15))
 			model.appendRow(item)
 		self.chatslist.setModel(model)
+
+		# The code below is really messy. It just tries to select the item that was selected before.
+		if currentlyselected:
+			index = -1
+			for i in range(len(self.chats)):
+				if self.chats[i][0] == currentlyselected:
+					index = i
+					break
+			if not index == -1:
+				self.chatslist.selectionModel().select(model.createIndex(index, 0), QtGui.QItemSelectionModel.Select)
 
 	def chatOptions(self, pos):
 		selected_CID = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
@@ -270,11 +283,16 @@ class identitytab(QtGui.QWidget, identity_ui):
 		global DB
 		cursor = DB.cursor()
 		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_to, time.time(), 0, _))
+
+		# Update LAST in CHATS
+		cursor.execute("UPDATE CHATS SET LAST=? WHERE ME=? AND THEY=?", (time.time(), self.ME, msg_to))
+
 		DB.commit()
 
 		self.writemsg.setText('')
 
 		self.updateMessages()	# Update the chat
+		self.updateChatsList()
 
 	def messageReceived(self, r):
 		global DB
@@ -304,6 +322,9 @@ class identitytab(QtGui.QWidget, identity_ui):
 		if not isInChats:
 			cursor.execute("INSERT INTO CHATS (ME, THEY, ALIAS, LAST) VALUES (?, ?, ?, ?)", (self.ME, msg_from, msg_from.upper()[:8], msg_time))
 
+		# Update LAST in CHATS
+		cursor.execute("UPDATE CHATS SET LAST=? WHERE ME=? AND THEY=?", (time.time(), self.ME, msg_from))
+
 		DB.commit()
 
 		# If the chat is open, update it
@@ -312,6 +333,8 @@ class identitytab(QtGui.QWidget, identity_ui):
 				self.updateMessages()
 		except:
 			pass
+
+		self.updateChatsList()
 
 class identityhash(QtGui.QDialog, identityhash_ui):
 	def __init__(self, parent, CID):

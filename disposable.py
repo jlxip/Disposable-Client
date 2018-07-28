@@ -63,12 +63,13 @@ class invalidtab(QtGui.QWidget, invalid_ui):
 		super(invalidtab, self).__init__(None)
 		self.setupUi(self)
 
-class identitytab(QtGui.QWidget, identity_ui):
-	def listen(self, CID, PRIV):
-		thisDB = sqlite3.connect('database')
-		cursor = thisDB.cursor()
-
-		s, result, thisAES, thisIV = authenticate(CID, PRIV)
+class listenThread(QtCore.QThread):
+	def __init__(self, parent):
+		QtCore.QThread.__init__(self, parent)
+		self.signal = QtCore.SIGNAL('signal')
+		self.parent = parent
+	def run(self):
+		s, result, thisAES, thisIV = authenticate(self.parent.ME, self.parent.PRIV)
 		if not result:
 			print 'Something went horribly wrong.'
 			exit()
@@ -80,38 +81,9 @@ class identitytab(QtGui.QWidget, identity_ui):
 			except:
 				s.close()
 				break
-			r = r.split('|')
-			msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), r[2], r[3]
-			#msg_from = r[0]
-			#msg_time = int(r[1])
-			#msg_key = r[2]
-			#msg_content = r[3]
+			self.emit(self.signal, r)
 
-			# First of all, msg_time is in UTC.
-			# Calculate the difference from UTC and apply it to the received time.
-			UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
-			msg_time += UTC_diff
-			#msg_time = str(msg_time)	# Remove this if you see it once you've tested it.
-
-			# 'msg_key' is encrypted with our public key. So, decrypt it with our private key.
-			msg_key = cryptic.getRSACipher(PRIV).decrypt(msg_key)
-
-			# 'msg_content' is encrypted with 'msg_key'.
-			# As we're using a random symmetric key for each message, there's no need to use a random IV.
-			msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
-
-			# Insert into the database
-			cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (CID, msg_from, msg_time, msg_content))
-
-			# If the identity who sent the message is not in CHATS, insert it.
-			isInChats = False
-			for i in cursor.execute("SELECT 1 FROM CHATS WHERE ME=? AND THEY=?", (CID, msg_from)):
-				isInChats = True
-			if not isInChats:
-				cursor.execute("INSERT INTO CHATS (ME, THEY, LAST) VALUES (?, ?, ?)", (CID, msg_from, msg_time))
-
-			thisDB.commit()
-
+class identitytab(QtGui.QWidget, identity_ui):
 	def __init__(self, CID, PRIV):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
@@ -131,20 +103,58 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		self.updateChatsList()
 
-		Thread(target=self.listen, args=(self.ME, self.PRIV)).start()
+		#Thread(target=self.listen, args=(self.ME, self.PRIV)).start()
+		thread = listenThread(self)
+		self.connect(thread, thread.signal, self.messageReceived)
+		thread.start()
 
 	def chatsListClicked(self):
-		selected_CID = self.chats[self.chatslist.selectedIndexes()[0].row()]
-		return
+		self.messages.setEnabled(True)
+		self.writemsg.setEnabled(True)
 
-	def updateChatsList(self):
+		self.updateMessages()
+
+	def updateMessages(self):
+		selected = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+
+		# Get messages from the database
+		global DB
+		cursor = DB.cursor()
+		messages = []
+		# WARNING: IT NEEDS A FUCKING LIMIT
+		for i in cursor.execute("SELECT CONTENT, TIMESTAMP FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, selected)):
+			messages.append([i[0], i[1]])
+
+		# Show messages in 'messages' (QListView)
+		model = QtGui.QStandardItemModel()
+		for i in messages:
+			shown = '[%i] %s' % (i[1], i[0])
+			item = QtGui.QStandardItem(shown)
+			item.setEditable(False)
+			model.appendRow(item)
+		self.messages.setModel(model)
+
+	def updateChatsList(self, thisDB=None):
 		self.chats = []
 
 		# Load chats from database
-		global DB
+		if thisDB == None:
+			global DB
+		else:
+			DB = thisDB
 		cursor = DB.cursor()
 		for i in cursor.execute("SELECT THEY, ALIAS FROM CHATS WHERE ME=? ORDER BY LAST DESC", (self.ME,)):
-			self.chats.append([i[0], i[1]])
+			# Get the public key of this chat
+			s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
+			if not result:
+				print 'Something went horribly wrong.'
+				exit()
+			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
+			PUB = cryptic.getRSACipher(cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)))
+			s.close()
+
+			# Append to the list
+			self.chats.append([i[0], i[1], PUB])
 
 		model = QtGui.QStandardItemModel()
 		for i in self.chats:
@@ -234,34 +244,58 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.updateChatsList()
 
 	def sendMessage(self):
-		msg_to = self.chats[self.chatslist.selectedIndexes()[0].row()]
-		msg_content = str(self.writemsg.text()[0])
-		print msg_to
-		print msg_content
-		exit()
+		_ = self.chats[self.chatslist.selectedIndexes()[0].row()]
+		msg_to = _[0]
+		PUB = _[2]
+		msg_content = str(self.writemsg.text())
+		_ = msg_content
 
-		# First, generate a random AES key
-		thisMessageAES = cryptic.genRandomAESKey()
-
-		# Then, get their public key
-		# WARNING: CHANGE THIS, THIS MUST ONLY BE EXECUTED ONCE
-		s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
-		if not result:
-			print 'Something went horribly wrong.'
-			exit()
-		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+THEY))
-		theirPUB = cryptic.getRSACipher(cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)))
-		s.close()
-
-		# Encrypt 'msg_content' with 'thisMessageAES'
-		msg_content = cryptic.encrypt(thisMessageAES, chr(0)*16, msg_content)
-
-		# Encrypt 'thisMessageAES' with their public key
-		thisMessageAES = theirPUB.encrypt(thisMessageAES)
+		thisMessageAES = cryptic.genRandomAESKey()	# First, generate a random AES key
+		msg_content = cryptic.encrypt(thisMessageAES, chr(0)*16, msg_content)	# Encrypt 'msg_content' with the AES key
+		thisMessageAES = PUB.encrypt(thisMessageAES)	# Encrypt the AES key with their public key
 
 		# Send the message
 		tosend = msg_to+'|'+base64.b64encode(thisMessageAES)+'|'+base64.b64encode(msg_content)
 		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, tosend))
+
+		# Insert the message into the database
+		global DB
+		cursor = DB.cursor()
+		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (self.ME, msg_to, time.time(), _))
+		DB.commit()
+
+		self.updateMessages()	# Update the chat
+
+	def messageReceived(self, r):
+		global DB
+		cursor = DB.cursor()
+		r = r.split('|')
+		msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), base64.b64decode(r[2]), base64.b64decode(r[3])
+
+		# First of all, msg_time is in UTC.
+		# Calculate the difference from UTC and apply it to the received time.
+		UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
+		msg_time += UTC_diff
+
+		# 'msg_key' is encrypted with our public key. So, decrypt it with our private key.
+		msg_key = cryptic.getRSACipher(self.PRIV).decrypt(msg_key)
+
+		# 'msg_content' is encrypted with 'msg_key'.
+		# As we're using a random symmetric key for each message, there's no need to use a random IV.
+		msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
+
+		# Insert into the database
+		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (self.ME, msg_from, msg_time, msg_content))
+
+		# If the identity who sent the message is not in CHATS, insert it.
+		isInChats = False
+		for i in cursor.execute("SELECT 1 FROM CHATS WHERE ME=? AND THEY=?", (self.ME, msg_from)):
+			isInChats = True
+		if not isInChats:
+			cursor.execute("INSERT INTO CHATS (ME, THEY, ALIAS, LAST) VALUES (?, ?, ?, ?)", (self.ME, msg_from, msg_from.upper()[:8], msg_time))
+
+		DB.commit()
+		self.updateChatsList()
 
 class identityhash(QtGui.QDialog, identityhash_ui):
 	def __init__(self, parent, CID):

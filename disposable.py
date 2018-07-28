@@ -184,7 +184,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		identityhash(self, selected_CID).show()
 
 	def renamechat(self, selected_CID):
-		ALIAS = str(QtGui.QInputDialog.getText(self, 'Rename chat', 'Enter the new name:')[0])
+		ALIAS = unicode(QtGui.QInputDialog.getText(self, 'Rename chat', 'Enter the new name:')[0].toUtf8(), encoding='utf-8')
 		if ALIAS == '':
 			return
 
@@ -255,8 +255,8 @@ class identitytab(QtGui.QWidget, identity_ui):
 		_ = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		msg_to = _[0]
 		PUB = _[2]
-		msg_content = str(self.writemsg.text())
-		_ = msg_content
+		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
+		_ = unicode(msg_content, encoding='utf-8')	# As unicode, to store it in the database
 
 		thisMessageAES = cryptic.genRandomAESKey()	# First, generate a random AES key
 		msg_content = cryptic.encrypt(thisMessageAES, chr(0)*16, msg_content)	# Encrypt 'msg_content' with the AES key
@@ -291,6 +291,8 @@ class identitytab(QtGui.QWidget, identity_ui):
 		# 'msg_content' is encrypted with 'msg_key'.
 		# As we're using a random symmetric key for each message, there's no need to use a random IV.
 		msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
+		# It's converted into unicode, so that it can be inserted into the database
+		msg_content = unicode(msg_content, encoding='utf-8')
 
 		# Insert into the database
 		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_from, msg_time, 1, msg_content))
@@ -405,7 +407,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 
 	def renameidentity(self):
 		k = self.identitiestab.currentIndex()-1
-		ALIAS = str(QtGui.QInputDialog.getText(self, 'Rename identity', 'Enter the new name:')[0])
+		ALIAS = unicode(QtGui.QInputDialog.getText(self, 'Rename identity', 'Enter the new name:')[0].toUtf8(), encoding='utf-8')
 		if ALIAS == '':
 			return
 		self.identities[k][2] = ALIAS

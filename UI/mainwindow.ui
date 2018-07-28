@@ -76,7 +76,7 @@
     </property>
     <addaction name="newidentity_btn"/>
     <addaction name="separator"/>
-    <addaction name="showaddress_btn"/>
+    <addaction name="showhash_btn"/>
     <addaction name="renameidentity_btn"/>
     <addaction name="deleteidentity_btn"/>
    </widget>
@@ -108,12 +108,12 @@
     <string>New chat</string>
    </property>
   </action>
-  <action name="showaddress_btn">
+  <action name="showhash_btn">
    <property name="enabled">
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Show address</string>
+    <string>Show hash</string>
    </property>
   </action>
  </widget>

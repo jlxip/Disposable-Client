@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Identity address</string>
+   <string>Identity hash</string>
   </property>
   <property name="modal">
    <bool>true</bool>
@@ -20,7 +20,7 @@
    <item>
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>Copy the following string and send it to the users you would like to talk to.</string>
+      <string>This is the hash of the chosen identity:</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>

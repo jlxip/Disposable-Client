@@ -1,13 +1,15 @@
 #!/usr/bin/env python2.7
+# -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime
 from PyQt4 import QtCore, QtGui, uic
+from threading import Thread
 
 UIdirectory = 'UI'+os.sep
 mainwindow_fc = uic.loadUiType(UIdirectory+'mainwindow.ui')[0]
 identity_ui = uic.loadUiType(UIdirectory+'identity.ui')[0]
 invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
-identityaddress_ui = uic.loadUiType(UIdirectory+'identityaddress.ui')[0]
+identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 
 def connectToNode():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -62,28 +64,208 @@ class invalidtab(QtGui.QWidget, invalid_ui):
 		self.setupUi(self)
 
 class identitytab(QtGui.QWidget, identity_ui):
-	def __init__(self):
+	def listen(self, CID, PRIV):
+		thisDB = sqlite3.connect('database')
+		cursor = thisDB.cursor()
+
+		s, result, thisAES, thisIV = authenticate(CID, PRIV)
+		if not result:
+			print 'Something went horribly wrong.'
+			exit()
+		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x00'))
+
+		while True:
+			try:
+				r = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
+			except:
+				s.close()
+				break
+			r = r.split('|')
+			msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), r[2], r[3]
+			#msg_from = r[0]
+			#msg_time = int(r[1])
+			#msg_key = r[2]
+			#msg_content = r[3]
+
+			# First of all, msg_time is in UTC.
+			# Calculate the difference from UTC and apply it to the received time.
+			UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
+			msg_time += UTC_diff
+			#msg_time = str(msg_time)	# Remove this if you see it once you've tested it.
+
+			# 'msg_key' is encrypted with our public key. So, decrypt it with our private key.
+			msg_key = cryptic.getRSACipher(PRIV).decrypt(msg_key)
+
+			# 'msg_content' is encrypted with 'msg_key'.
+			# As we're using a random symmetric key for each message, there's no need to use a random IV.
+			msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
+
+			# Insert into the database
+			cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, CONTENT) VALUES (?, ?, ?, ?)", (CID, msg_from, msg_time, msg_content))
+
+			# If the identity who sent the message is not in CHATS, insert it.
+			isInChats = False
+			for i in cursor.execute("SELECT 1 FROM CHATS WHERE ME=? AND THEY=?", (CID, msg_from)):
+				isInChats = True
+			if not isInChats:
+				cursor.execute("INSERT INTO CHATS (ME, THEY, LAST) VALUES (?, ?, ?)", (CID, msg_from, msg_time))
+
+			thisDB.commit()
+
+	def __init__(self, CID, PRIV):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
 		self.newchat_btn.clicked.connect(self.newchat)
+		self.ME = CID
+		self.PRIV = PRIV
+		self.chatslist.doubleClicked.connect(self.chatsListClicked)
+		self.chatslist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
+		self.writemsg.returnPressed.connect(self.sendMessage)
+
+		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
+		if not _result:
+			print 'Something went horribly wrong.'
+			exit()
+		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, '\x01'))
+
+		self.updateChatsList()
+
+		Thread(target=self.listen, args=(self.ME, self.PRIV)).start()
+
+	def chatsListClicked(self):
+		selected_CID = self.chats[self.chatslist.selectedIndexes()[0].row()]
+		return
+
+	def updateChatsList(self):
+		self.chats = []
+
+		# Load chats from database
+		global DB
+		cursor = DB.cursor()
+		for i in cursor.execute("SELECT THEY, ALIAS FROM CHATS WHERE ME=? ORDER BY LAST DESC", (self.ME,)):
+			self.chats.append([i[0], i[1]])
+
+		model = QtGui.QStandardItemModel()
+		for i in self.chats:
+			item = QtGui.QStandardItem(i[1])
+			item.setEditable(False)
+			item.setFont(QtGui.QFont('Sans', 15))
+			model.appendRow(item)
+		self.chatslist.setModel(model)
+
+	def chatOptions(self, pos):
+		selected_CID = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+		menu = QtGui.QMenu()
+		menu.addAction('Show hash', lambda:self.showhash(selected_CID))
+		menu.addAction('Rename', lambda:self.renamechat(selected_CID))
+		menu.addAction('Delete', lambda:self.deleteChat(selected_CID))
+		menu.exec_(QtGui.QCursor.pos())
+
+	def showhash(self, selected_CID):
+		identityhash(self, selected_CID).show()
+
+	def renamechat(self, selected_CID):
+		ALIAS = str(QtGui.QInputDialog.getText(self, 'Rename chat', 'Enter the new name:')[0])
+		if ALIAS == '':
+			return
+
+		# Update the row in the database
+		global DB
+		cursor = DB.cursor()
+		cursor.execute("UPDATE CHATS SET ALIAS=? WHERE ME=? AND THEY=?", (ALIAS, self.ME, selected_CID))
+		DB.commit()
+
+		self.updateChatsList()	# Update the chats list
+
+	def deleteChat(self, selected_CID):
+		# Sure?
+		sure = QtGui.QMessageBox(self)
+		sure.setIcon(QtGui.QMessageBox.Information)
+		sure.setText('Are you sure you want to delete this chat?')
+		sure.setInformativeText('You will lose all the messages.')
+		sure.addButton(QtGui.QMessageBox.Yes)
+		sure.addButton(QtGui.QMessageBox.No)
+		sure.setDefaultButton(QtGui.QMessageBox.No)
+		ret = sure.exec_()
+		if ret == QtGui.QMessageBox.Yes:
+			global DB
+			cursor = DB.cursor()
+
+			cursor.execute("DELETE FROM CHATS WHERE ME=? AND THEY=?", (self.ME, selected_CID))	# First, remove the row in CHATS
+			cursor.execute("DELETE FROM MESSAGES WHERE ME=? AND THEY=?", (self.ME, selected_CID))	# Then, remove the messages
+			DB.commit()
+
+			self.updateChatsList()	# Finally, update the chats list
+
 	def newchat(self):
-		CID = str(QtGui.QInputDialog.getText(self, 'New chat', 'Enter the identity:')[0])
+		THEY = str(QtGui.QInputDialog.getText(self, 'New chat', 'Enter the identity:')[0])
+		if THEY == '':
+			return
+
+		global DB
+		cursor = DB.cursor()
+
+		# Check if it's already in chats
+		isInChats = False
+		for i in cursor.execute("SELECT 1 FROM CHATS WHERE ME=? AND THEY=?", (self.ME, THEY)):
+			isInChats = True
+		if isInChats:
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Warning)
+			msg.setText('The given identity hash is already in your chats.')
+			msg.exec_()
+			self.close()
+			return
+
 		# Check if the identity exists in the node
-		result = authenticate(CID, '')
+		result = authenticate(THEY, '')
 		if result[0] == None:
 			# It doesn't exist
 			msg = QtGui.QMessageBox()
 			msg.setIcon(QtGui.QMessageBox.Critical)
-			msg.setText('The identity doesn\'t exist in the node.')
+			msg.setText('The given identity hash doesn\'t exist in the node.')
 			msg.exec_()
 			self.close()
 			return
-		# It does exist
 
+		cursor.execute("INSERT INTO CHATS (ME, THEY, ALIAS, LAST) VALUES (?, ?, ?, ?)", (self.ME, THEY, THEY.upper()[:8], time.time()))
+		DB.commit()
+		self.updateChatsList()
 
-class identityaddress(QtGui.QDialog, identityaddress_ui):
+	def sendMessage(self):
+		msg_to = self.chats[self.chatslist.selectedIndexes()[0].row()]
+		msg_content = str(self.writemsg.text()[0])
+		print msg_to
+		print msg_content
+		exit()
+
+		# First, generate a random AES key
+		thisMessageAES = cryptic.genRandomAESKey()
+
+		# Then, get their public key
+		# WARNING: CHANGE THIS, THIS MUST ONLY BE EXECUTED ONCE
+		s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
+		if not result:
+			print 'Something went horribly wrong.'
+			exit()
+		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+THEY))
+		theirPUB = cryptic.getRSACipher(cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)))
+		s.close()
+
+		# Encrypt 'msg_content' with 'thisMessageAES'
+		msg_content = cryptic.encrypt(thisMessageAES, chr(0)*16, msg_content)
+
+		# Encrypt 'thisMessageAES' with their public key
+		thisMessageAES = theirPUB.encrypt(thisMessageAES)
+
+		# Send the message
+		tosend = msg_to+'|'+base64.b64encode(thisMessageAES)+'|'+base64.b64encode(msg_content)
+		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, tosend))
+
+class identityhash(QtGui.QDialog, identityhash_ui):
 	def __init__(self, parent, CID):
-		super(identityaddress, self).__init__(parent)
+		super(identityhash, self).__init__(parent)
 		self.setupUi(self)
 		self.address_field.setText(CID)
 
@@ -97,7 +279,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 
 		self.newidentity_btn.triggered.connect(self.newidentity)
 		self.identitiestab.currentChanged.connect(self.tabChanged)
-		self.showaddress_btn.triggered.connect(self.showaddress)
+		self.showhash_btn.triggered.connect(self.showhash)
 		self.renameidentity_btn.triggered.connect(self.renameidentity)
 		self.deleteidentity_btn.triggered.connect(self.deleteidentity)
 
@@ -128,7 +310,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
 			if self.identities[i][3]:
 				ALIAS = self.identities[i][2]
-				tab = identitytab()
+				tab = identitytab(self.identities[i][0], self.identities[i][1])
 			else:
 				ALIAS = '[INVALID] '+self.identities[i][2]
 				tab = invalidtab()
@@ -165,13 +347,13 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 
 	def tabChanged(self):
 		i = self.identitiestab.currentIndex()
-		self.showaddress_btn.setEnabled(not i == 0)
+		self.showhash_btn.setEnabled(not i == 0)
 		self.renameidentity_btn.setEnabled(not i == 0)
 		self.deleteidentity_btn.setEnabled(not i == 0)
 
-	def showaddress(self):
+	def showhash(self):
 		CID = self.identities[self.identitiestab.currentIndex()-1][0]
-		identityaddress(self, CID).show()
+		identityhash(self, CID).show()
 
 	def renameidentity(self):
 		k = self.identitiestab.currentIndex()-1
@@ -243,8 +425,8 @@ if __name__ == '__main__':
 	if not areTablesThere:
 		# If the tables do not exist, create them
 		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'PRIV' TEXT, 'ALIAS' TEXT)")
-		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT)")
-		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' TEXT, 'CONTENT' TEXT)")
+		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
+		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'CONTENT' TEXT)")
 		DB.commit()
 
 	# Start the application

@@ -83,13 +83,15 @@ class listenThread(QtCore.QThread):
 			self.emit(self.signal, r)
 
 class identitytab(QtGui.QWidget, identity_ui):
-	def __init__(self, ME, PRIV, ALIAS):
+	def __init__(self, ME, PRIV, ALIAS, tabs, tabIndex):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
 		self.newchat_btn.clicked.connect(self.newchat)
 		self.ME = ME
 		self.PRIV = PRIV
 		self.ALIAS = ALIAS
+		self.tabs = tabs
+		self.tabIndex = tabIndex
 		self.chatslist.doubleClicked.connect(self.chatsListClicked)
 		self.chatslist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
@@ -108,10 +110,16 @@ class identitytab(QtGui.QWidget, identity_ui):
 		thread.start()
 
 	def chatsListClicked(self):
+		selected = self.chatslist.selectedIndexes()[0].row()
+
 		self.messages.setEnabled(True)
 		self.writemsg.setEnabled(True)
-		self.writemsg.setPlaceholderText('Write something to '+self.chats[self.chatslist.selectedIndexes()[0].row()][1])
+		self.writemsg.setPlaceholderText('Write something to '+self.chats[selected][1])
 
+		if self.chats[selected][0] in UNREAD_CHATS:
+			UNREAD_CHATS.pop(selected)
+			self.tabs.setTabText(self.tabIndex, self.ALIAS)
+			self.updateChatsList()
 		self.updateMessages()
 
 	def updateMessages(self):
@@ -127,10 +135,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 			messages.append(i)
 
 		# Show messages in 'messages' (QListView)
-
 		show = []
 		for i in messages:
-			who = self.ALIAS if i[1] == 0 else selected[1]
+			# Before 'You' was self.ALIAS, but that might be confusing to the user.
+			who = 'You' if i[1] == 0 else selected[1]
 			shown = '[%s] <%s> %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, i[2])
 			show.append(shown)
 		self.messages.setPlainText('\n'.join(show))
@@ -177,9 +185,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		model = QtGui.QStandardItemModel()
 		for i in self.chats:
-			item = QtGui.QStandardItem(i[1])
+			name = '*'+i[1] if i[0] in UNREAD_CHATS else i[1]
+			bold = 75 if i[0] in UNREAD_CHATS else 50
+
+			item = QtGui.QStandardItem(name)
 			item.setEditable(False)
-			item.setFont(QtGui.QFont('Sans', 15))
+			item.setFont(QtGui.QFont('Sans', 15, bold))
 			model.appendRow(item)
 		self.chatslist.setModel(model)
 
@@ -216,6 +227,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		DB.commit()
 
 		self.updateChatsList()	# Update the chats list
+		self.updateMessages()	# Update messages, in order to change the name in desplay
 
 	def deleteChat(self, selected_CID):
 		# Sure?
@@ -348,7 +360,13 @@ class identitytab(QtGui.QWidget, identity_ui):
 			if self.chats[self.chatslist.selectedIndexes()[0].row()][0] == msg_from:
 				self.updateMessages()
 		except:
-			pass
+			# If not, add its CID to UNREAD_CHATS
+			UNREAD_CHATS.append(msg_from)
+			# And rename the tab
+			self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
+
+		# If the tab is not selected, rename it as well
+		self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
 
 		self.updateChatsList()
 
@@ -399,7 +417,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
 			if self.identities[i][3]:
 				ALIAS = self.identities[i][2]
-				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS)
+				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS, self.identitiestab, i+1)
 			else:
 				ALIAS = '[INVALID] '+self.identities[i][2]
 				tab = invalidtab()
@@ -439,6 +457,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.showhash_btn.setEnabled(not i == 0)
 		self.renameidentity_btn.setEnabled(not i == 0)
 		self.deleteidentity_btn.setEnabled(not i == 0)
+		self.identitiestab.setTabText(i, self.identities[i-1][2])	# Set the ALIAS as the tab text, in case it has a '*'.
 
 	def showhash(self):
 		CID = self.identities[self.identitiestab.currentIndex()-1][0]
@@ -487,7 +506,11 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 			# Remove from database
 			global DB
 			cursor = DB.cursor()
+
 			cursor.execute("DELETE FROM IDENTITIES WHERE CID=?", (CID,))
+			cursor.execute("DELETE FROM CHATS WHERE ME=?", (CID,))
+			cursor.execute("DELETE FROM MESSAGES WHERE ME=?", (CID,))
+
 			DB.commit()
 
 if __name__ == '__main__':
@@ -517,6 +540,10 @@ if __name__ == '__main__':
 		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
 		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
 		DB.commit()
+
+	# These are for showing unread chats in bold
+	global UNREAD_CHATS
+	UNREAD_CHATS = []
 
 	# Start the application
 	app = QtGui.QApplication(sys.argv)

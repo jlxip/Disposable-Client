@@ -1,0 +1,6 @@
+<RCC>
+  <qresource>
+    <file>MainImage/MainImage.png</file>
+    <file>MainImage/256x256.png</file>
+  </qresource>
+</RCC>

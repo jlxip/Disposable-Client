@@ -11,8 +11,6 @@ identity_ui = uic.loadUiType(UIdirectory+'identity.ui')[0]
 invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
 identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 
-UTC_diff = int(time.time()) - int(datetime.datetime.utcnow().strftime('%s'))
-
 def connectToNode():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	try:
@@ -363,9 +361,6 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		r = r.split('|')
 		msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), base64.b64decode(r[2]), base64.b64decode(r[3])
-
-		# As msg_time is in UTC, apply the difference to UTC (calculated at the beginning of the execution) to the received time.
-		msg_time += UTC_diff
 
 		# 'msg_key' is encrypted with our public key. So, decrypt it with our private key.
 		msg_key = cryptic.getRSACipher(self.PRIV).decrypt(msg_key)

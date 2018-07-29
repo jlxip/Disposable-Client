@@ -299,6 +299,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 		DB.commit()
 		self.updateChatsList()
 
+	def deletedIdentity(self):
+		msg = QtGui.QMessageBox()
+		msg.setIcon(QtGui.QMessageBox.Critical)
+		msg.setText('This identity has been deleted.')
+		msg.exec_()
+
 	def sendMessage(self):
 		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
 		if msg_content == '':
@@ -309,10 +315,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		PUB = _[2]
 
 		if PUB == '':
-			msg = QtGui.QMessageBox()
-			msg.setIcon(QtGui.QMessageBox.Critical)
-			msg.setText('This identity has been deleted.')
-			msg.exec_()
+			self.deletedIdentity()
 			return
 
 		_ = unicode(msg_content, encoding='utf-8')	# As unicode, to store it in the database
@@ -324,6 +327,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		# Send the message
 		tosend = msg_to+'|'+base64.b64encode(thisMessageAES)+'|'+base64.b64encode(msg_content)
 		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, tosend))
+
+		if not cryptic.decrypt(self.thisAES, self.thisIV, data.recv_msg(self.SEND)) == '\x00':
+			self.deletedIdentity()
+			return
 
 		# Insert the message into the database
 		global DB
@@ -578,8 +585,9 @@ if __name__ == '__main__':
 		areTablesThere = True	# The tables already exist
 	if not areTablesThere:
 		# If the tables do not exist, create them
-		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'PRIV' TEXT, 'ALIAS' TEXT)")
+		cursor.execute("CREATE TABLE 'IDENTITIES' ('CID' TEXT PRIMARY KEY, 'PRIV' TEXT, 'ALIAS' TEXT)")
 		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
+		cursor.execute("CREATE TABLE 'PUBS' ('CID' TEXT PRIMARY KEY, 'PUB' TEXT)")
 		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
 		DB.commit()
 

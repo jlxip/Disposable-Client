@@ -161,6 +161,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 			PUB = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
 			s.close()
 
+			if PUB == '\x01':
+				self.chats.append([i[0], i[1], ''])
+				continue
+
 			# Check if the CID is the MD5 hash of the public key.
 			if not hashlib.md5(PUB).hexdigest() == i[0]:
 				print 'Something went horribly wrong (MALICIOUS-NODE).'
@@ -272,6 +276,14 @@ class identitytab(QtGui.QWidget, identity_ui):
 		_ = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		msg_to = _[0]
 		PUB = _[2]
+
+		if PUB == '':
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('This identity has been deleted.')
+			msg.exec_()
+			return
+
 		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
 		_ = unicode(msg_content, encoding='utf-8')	# As unicode, to store it in the database
 

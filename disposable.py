@@ -292,6 +292,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.updateChatsList()
 
 	def sendMessage(self):
+		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
+		if msg_content == '':
+			return
+
 		_ = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		msg_to = _[0]
 		PUB = _[2]
@@ -303,7 +307,6 @@ class identitytab(QtGui.QWidget, identity_ui):
 			msg.exec_()
 			return
 
-		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
 		_ = unicode(msg_content, encoding='utf-8')	# As unicode, to store it in the database
 
 		thisMessageAES = cryptic.genRandomAESKey()	# First, generate a random AES key

@@ -208,6 +208,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 					break
 			if not index == -1:
 				self.chatslist.selectionModel().select(model.createIndex(index, 0), QtGui.QItemSelectionModel.Select)
+				self.writemsg.setPlaceholderText('Write something to '+self.chats[i][1])	# This has to be reset in case the alias has been changed.
 
 	def chatOptions(self, pos):
 		selected_CID = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
@@ -488,7 +489,8 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.showhash_btn.setEnabled(not i == 0)
 		self.renameidentity_btn.setEnabled(not i == 0)
 		self.deleteidentity_btn.setEnabled(not i == 0)
-		self.identitiestab.setTabText(i, self.identities[i-1][2])	# Set the ALIAS as the tab text, in case it has a '*'.
+		if not i == 0:
+			self.identitiestab.setTabText(i, self.identities[i-1][2])	# Set the ALIAS as the tab text, in case it has a '*'.
 
 	def showhash(self):
 		CID = self.identities[self.identitiestab.currentIndex()-1][0]

@@ -166,22 +166,31 @@ class identitytab(QtGui.QWidget, identity_ui):
 		cursor = DB.cursor()
 		for i in cursor.execute("SELECT THEY, ALIAS FROM CHATS WHERE ME=? ORDER BY LAST DESC", (self.ME,)):
 			# Get the public key of this chat
-			s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
-			if not result:
-				print 'Something went horribly wrong (UPDATE-CHATS).'
-				exit()
-			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
-			PUB = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
-			s.close()
+			PUB = False
+			for j in cursor.execute("SELECT PUB FROM PUBS WHERE CID=?", (i[0],)):
+				PUB = j[0]
+			if not PUB:
+				# Request it from the node
+				s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
+				if not result:
+					print 'Something went horribly wrong (UPDATE-CHATS).'
+					exit()
+				data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
+				PUB = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
+				s.close()
 
-			if PUB == '\x01':
-				self.chats.append([i[0], i[1], ''])
-				continue
+				if PUB == '\x01':
+					self.chats.append([i[0], i[1], ''])
+					continue
 
-			# Check if the CID is the MD5 hash of the public key.
-			if not hashlib.md5(PUB).hexdigest() == i[0]:
-				print 'Something went horribly wrong (MALICIOUS-NODE).'
-				exit()
+				# Check if the CID is the MD5 hash of the public key.
+				if not hashlib.md5(PUB).hexdigest() == i[0]:
+					print 'Something went horribly wrong (MALICIOUS-NODE).'
+					exit()
+
+				# Store it in the database for the next time
+				cursor.execute("INSERT INTO PUBS (CID, PUB) VALUES (?, ?)", (i[0], PUB))
+				DB.commit()
 
 			PUB = cryptic.getRSACipher(PUB)
 

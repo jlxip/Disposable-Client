@@ -158,8 +158,15 @@ class identitytab(QtGui.QWidget, identity_ui):
 				print 'Something went horribly wrong (UPDATE-CHATS).'
 				exit()
 			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
-			PUB = cryptic.getRSACipher(cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)))
+			PUB = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
 			s.close()
+
+			# Check if the CID is the MD5 hash of the public key.
+			if not hashlib.md5(PUB).hexdigest() == i[0]:
+				print 'Something went horribly wrong (MALICIOUS-NODE).'
+				exit()
+
+			PUB = cryptic.getRSACipher(PUB)
 
 			# Append to the list
 			self.chats.append([i[0], i[1], PUB])

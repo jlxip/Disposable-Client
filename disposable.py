@@ -92,9 +92,11 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.ALIAS = ALIAS
 		self.tabs = tabs
 		self.tabIndex = tabIndex
+		self.writingtimers = []
 		self.chatslist.doubleClicked.connect(self.chatsListClicked)
 		self.chatslist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
+		self.writemsg.textEdited.connect(self.sendWritingSignal)
 		self.writemsg.returnPressed.connect(self.sendMessage)
 
 		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
@@ -109,7 +111,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.connect(thread, thread.signal, self.messageReceived)
 		thread.start()
 
+	def sendWritingSignal(self):
+		CID = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, '\x00'+CID))
+
 	def chatsListClicked(self):
+		self.writemsg.setText('')
 		selected = self.chatslist.selectedIndexes()[0].row()
 
 		self.messages.setEnabled(True)
@@ -322,9 +329,35 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.updateMessages()	# Update the chat
 		self.updateChatsList()
 
+	def tickWriting(self):
+		try:
+			self.writingtimers.pop(0)
+		except:
+			pass
+		if len(self.writingtimers) == 0:
+			self.writing.setText('')
+
 	def messageReceived(self, r):
 		global DB
 		cursor = DB.cursor()
+
+		if r[0] == '\x00':
+			r = r[1:].split('|')
+			try:
+				selected = self.chats[self.chatslist.selectedIndexes()[0].row()]
+			except:
+				return
+			if self.ME == r[0] and selected[0] == r[1]:
+				self.writing.setText('%s is writing...' % selected[1])
+				writingTimer = QtCore.QTimer()
+				writingTimer.setSingleShot(True)
+				writingTimer.timeout.connect(self.tickWriting)
+				writingTimer.start(1000)
+				self.writingtimers.append(writingTimer)
+			return
+		self.writingtimers = []
+		self.tickWriting()
+
 		r = r.split('|')
 		msg_from, msg_time, msg_key, msg_content = r[0], int(r[1]), base64.b64decode(r[2]), base64.b64decode(r[3])
 

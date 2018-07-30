@@ -12,12 +12,13 @@ To connect to a node, you have to get its `node.dat` file via a secure channel (
 There are no users in Disposable, but **identities**. These are shared via a 32-bytes long string, known as _client identity hash_ (CID). To exchange messages with a person, you have to exchange first your CIDs via a secure channel as well. Even though only one person needs the other one's CID to establish a chat, if they send theirs as well, both of them can be sure that no one is impersonating them.
 
 ## Installation
-First, you need to have installed Python 2.7 (Click [here](https://www.python.org/downloads/) for Windows, in GNU/Linux is installed by default), as well as some dependencies: PyCrypto and PyQt4.
+First, you need to have installed Python 2.7 (Click [here](https://www.python.org/downloads/) for Windows, in GNU/Linux is installed by default), as well as some dependencies: PyCrypto, PyQt4 and PyGame.
 
 ### GNU/Linux
 In Debian-based GNU/Linux distributions, you can install them easily with the following commands:
 ```
 sudo apt install python-crypto python-qt4
+sudo pip install pygame
 ```
 
 ### Windows
@@ -45,6 +46,12 @@ Finally, in the directory of the download, run:
 
 ```
 C:\Python27\Scripts\pip.exe install PyQt4[Tab]
+```
+
+And install PyGame as well:
+
+```
+C:\Python27\Scripts\pip.exe install pygame
 ```
 
 ## Running

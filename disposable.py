@@ -165,9 +165,11 @@ class identitytab(QtGui.QWidget, identity_ui):
 		global DB
 		cursor = DB.cursor()
 		for i in cursor.execute("SELECT THEY, ALIAS FROM CHATS WHERE ME=? ORDER BY LAST DESC", (self.ME,)):
+			self.chats.append([i[0], i[1]])
+		for i in range(len(self.chats)):
 			# Get the public key of this chat
 			PUB = False
-			for j in cursor.execute("SELECT PUB FROM PUBS WHERE CID=?", (i[0],)):
+			for j in cursor.execute("SELECT PUB FROM PUBS WHERE CID=?", (self.chats[i][0],)):
 				PUB = j[0]
 			if not PUB:
 				# Request it from the node
@@ -175,27 +177,27 @@ class identitytab(QtGui.QWidget, identity_ui):
 				if not result:
 					print 'Something went horribly wrong (UPDATE-CHATS).'
 					exit()
-				data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+i[0]))
+				data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x03'+self.chats[i][0]))
 				PUB = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
 				s.close()
 
 				if PUB == '\x01':
-					self.chats.append([i[0], i[1], ''])
+					self.chats[i].append('')
 					continue
 
 				# Check if the CID is the MD5 hash of the public key.
-				if not hashlib.md5(PUB).hexdigest() == i[0]:
+				if not hashlib.md5(PUB).hexdigest() == self.chats[i][0]:
 					print 'Something went horribly wrong (MALICIOUS-NODE).'
 					exit()
 
 				# Store it in the database for the next time
-				cursor.execute("INSERT INTO PUBS (CID, PUB) VALUES (?, ?)", (i[0], PUB))
+				cursor.execute("INSERT INTO PUBS (CID, PUB) VALUES (?, ?)", (self.chats[i][0], PUB))
 				DB.commit()
 
 			PUB = cryptic.getRSACipher(PUB)
 
 			# Append to the list
-			self.chats.append([i[0], i[1], PUB])
+			self.chats[i].append(PUB)
 
 		model = QtGui.QStandardItemModel()
 		for i in self.chats:

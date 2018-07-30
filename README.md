@@ -28,13 +28,13 @@ If you have a full C/C++ development environment installed, you can install it w
 If you don't, you can try the following for x86_64:
 
 ```
-C:\Python27\Scripts\easy_install.exe http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win32-py2.7.exe
+C:\Python27\Scripts\easy_install.exe http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win-amd64-py2.7.exe
 ```
 
 Or this if you have x86:
 
 ```
-C:\Python27\Scripts\easy_install.exe http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win-amd64-py2.7.exe
+C:\Python27\Scripts\easy_install.exe http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win32-py2.7.exe
 ```
 
 Alternatively, if you encounter any error during installation, you can try installing the MSI files. [This one](http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win-amd64-py2.7.msi) for x86_64, or [this one](http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win32-py2.7.msi) for x86.

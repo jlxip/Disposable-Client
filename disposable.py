@@ -429,8 +429,6 @@ class identitytab(QtGui.QWidget, identity_ui):
 		except:
 			# If not, add its CID to UNREAD_CHATS
 			UNREAD_CHATS.append(msg_from)
-			# And rename the tab
-			self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
 			# And also, play the notification sound
 			if PREFERENCES['notification']:
 				mixer.music.play()
@@ -440,7 +438,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		# If the tab is not selected, rename it as well
 		try:
-			if not self.chatslist.selectedIndexes()[0].row() == self.tabIndex:
+			if not self.tabs.currentIndex() == self.tabIndex:
 				self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
 				# And play the sound as well, in case it hasn't been played before
 				if not soundPlayed:

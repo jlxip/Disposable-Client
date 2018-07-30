@@ -1,8 +1,9 @@
 #!/usr/bin/env python2.7
 # -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json
 from PyQt4 import QtCore, QtGui, uic
+from pygame import mixer
 from threading import Thread
 
 UIdirectory = 'UI'+os.sep
@@ -81,21 +82,26 @@ class listenThread(QtCore.QThread):
 			self.emit(self.signal, r)
 
 class identitytab(QtGui.QWidget, identity_ui):
-	def __init__(self, ME, PRIV, ALIAS, tabs, tabIndex):
+	def __init__(self, ME, PRIV, ALIAS, tabIndex, parent):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
 		self.newchat_btn.clicked.connect(self.newchat)
 		self.ME = ME
 		self.PRIV = PRIV
 		self.ALIAS = ALIAS
-		self.tabs = tabs
+		self.tabs = parent.identitiestab
 		self.tabIndex = tabIndex
 		self.writingtimers = []
+		self.parent = parent
+		self.chats = []
 		self.chatslist.doubleClicked.connect(self.chatsListClicked)
 		self.chatslist.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
 		self.writemsg.textEdited.connect(self.sendWritingSignal)
 		self.writemsg.returnPressed.connect(self.sendMessage)
+
+		global PREFERENCES
+		self.messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
 
 		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
 		if not _result:
@@ -123,8 +129,17 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		if self.chats[selected][0] in UNREAD_CHATS:
 			UNREAD_CHATS.pop(selected)
-			self.tabs.setTabText(self.tabIndex, self.ALIAS)
 			self.updateChatsList()
+
+		areAllChatsRead = True
+		for i in range(len(self.chats)):
+			if self.chats[i][0] in UNREAD_CHATS:
+				areAllChatsRead = False
+				break
+		if areAllChatsRead:
+			self.tabs.setTabText(self.tabIndex, self.ALIAS)
+			self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/256x256.png')))
+
 		self.updateMessages()
 
 	def updateMessages(self):
@@ -405,6 +420,8 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		DB.commit()
 
+		soundPlayed = False
+
 		# If the chat is open, update it
 		try:
 			if self.chats[self.chatslist.selectedIndexes()[0].row()][0] == msg_from:
@@ -414,9 +431,25 @@ class identitytab(QtGui.QWidget, identity_ui):
 			UNREAD_CHATS.append(msg_from)
 			# And rename the tab
 			self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
+			# And also, play the notification sound
+			if PREFERENCES['notification']:
+				mixer.music.play()
+				soundPlayed = True
+			# Finally set the new window icon
+			self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
 
 		# If the tab is not selected, rename it as well
-		self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
+		try:
+			if not self.chatslist.selectedIndexes()[0].row() == self.tabIndex:
+				self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
+				# And play the sound as well, in case it hasn't been played before
+				if not soundPlayed:
+					if PREFERENCES['notification']:
+						mixer.music.play()
+				# And set the new window icon
+				self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
+		except:
+			pass
 
 		self.updateChatsList()
 
@@ -440,12 +473,37 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.renameidentity_btn.triggered.connect(self.renameidentity)
 		self.deleteidentity_btn.triggered.connect(self.deleteidentity)
 
+		self.increasefontsize.triggered.connect(self.fontsizeplus)
+		self.decreasefontsize.triggered.connect(self.fontsizeminus)
+		self.notificationsound.triggered.connect(self.switchnotification)
+
 	def center(self):
 		frameGm = self.frameGeometry()
 		screen = QtGui.QApplication.desktop().screenNumber(QtGui.QApplication.desktop().cursor().pos())
 		centerPoint = QtGui.QApplication.desktop().screenGeometry(screen).center()
 		frameGm.moveCenter(centerPoint)
 		self.move(frameGm.topLeft())
+
+	def writePreferences(self):
+		global PREFERENCES
+		with open('preferences.dat', 'w') as f:
+			f.write(json.dumps(PREFERENCES))
+
+	def fontsizeplus(self):
+		PREFERENCES['font-size'] += 1
+		self.writePreferences()
+		for i in range(1, self.identitiestab.count()):
+			self.identitiestab.widget(i).messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
+
+	def fontsizeminus(self):
+		PREFERENCES['font-size'] -= 1
+		self.writePreferences()
+		for i in range(1, self.identitiestab.count()):
+			self.identitiestab.widget(i).messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
+
+	def switchnotification(self):
+		PREFERENCES['notification'] = not PREFERENCES['notification']
+		self.writePreferences()
 
 	def loadIdentities(self):
 		# Read the CIDs from database
@@ -467,7 +525,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
 			if self.identities[i][3]:
 				ALIAS = self.identities[i][2]
-				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS, self.identitiestab, i+1)
+				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS, i+1, self)
 			else:
 				ALIAS = '[INVALID] '+self.identities[i][2]
 				tab = invalidtab()
@@ -508,7 +566,14 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.renameidentity_btn.setEnabled(not i == 0)
 		self.deleteidentity_btn.setEnabled(not i == 0)
 		if not i == 0:
-			self.identitiestab.setTabText(i, self.identities[i-1][2])	# Set the ALIAS as the tab text, in case it has a '*'.
+			areAllChatsRead = True
+			for j in range(len(self.identitiestab.widget(i).chats)):
+				if self.identitiestab.widget(i).chats[j][0] in UNREAD_CHATS:
+					areAllChatsRead = False
+					break
+			if areAllChatsRead:
+				self.identitiestab.setTabText(i, self.identities[i-1][2])	# Set the ALIAS as the tab text, in case it has a '*'.
+				self.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/256x256.png')))	# Set the window icon to "no messages"
 
 	def showhash(self):
 		CID = self.identities[self.identitiestab.currentIndex()-1][0]
@@ -592,6 +657,20 @@ if __name__ == '__main__':
 		cursor.execute("CREATE TABLE 'PUBS' ('CID' TEXT PRIMARY KEY, 'PUB' TEXT)")
 		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
 		DB.commit()
+
+	# Load preferences
+	global PREFERENCES
+	PREFERENCES = {
+		'font-size': 11,
+		'notification': True
+	}
+	if os.path.isfile('preferences.dat'):
+		with open('preferences.dat', 'r') as f:
+			PREFERENCES = f.read()
+			PREFERENCES = json.JSONDecoder().decode(PREFERENCES)
+
+	mixer.init()
+	mixer.music.load('sounds'+os.sep+'stairs.mp3')
 
 	# These are for showing unread chats in bold
 	global UNREAD_CHATS

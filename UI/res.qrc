@@ -1,6 +1,7 @@
 <RCC>
   <qresource>
+    <file>Icons/256x256.png</file>
+    <file>Icons/newmessages.png</file>
     <file>MainImage/MainImage.png</file>
-    <file>MainImage/256x256.png</file>
   </qresource>
 </RCC>

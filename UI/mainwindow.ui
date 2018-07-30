@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="res.qrc">
-    <normaloff>:/MainImage/256x256.png</normaloff>:/MainImage/256x256.png</iconset>
+    <normaloff>:/Icons/256x256.png</normaloff>:/Icons/256x256.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
@@ -75,11 +75,21 @@
     <addaction name="renameidentity_btn"/>
     <addaction name="deleteidentity_btn"/>
    </widget>
+   <widget class="QMenu" name="menuPreferences">
+    <property name="title">
+     <string>Preferences</string>
+    </property>
+    <addaction name="increasefontsize"/>
+    <addaction name="decreasefontsize"/>
+    <addaction name="separator"/>
+    <addaction name="notificationsound"/>
+   </widget>
    <addaction name="menuIdentity"/>
+   <addaction name="menuPreferences"/>
   </widget>
   <action name="newidentity_btn">
    <property name="text">
-    <string>New identity</string>
+    <string>&amp;New identity</string>
    </property>
   </action>
   <action name="deleteidentity_btn">
@@ -95,7 +105,7 @@
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Rename</string>
+    <string>&amp;Rename</string>
    </property>
   </action>
   <action name="newchat">
@@ -108,7 +118,58 @@
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Show hash</string>
+    <string>Show &amp;hash</string>
+   </property>
+  </action>
+  <action name="increasefontsize">
+   <property name="text">
+    <string>Increase font size</string>
+   </property>
+  </action>
+  <action name="decreasefontsize">
+   <property name="text">
+    <string>Decrease font size</string>
+   </property>
+  </action>
+  <action name="notificationenabled">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Enabled</string>
+   </property>
+  </action>
+  <action name="action_Stairs">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&quot;Stairs&quot;</string>
+   </property>
+  </action>
+  <action name="action_Case_closed">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&quot;Case closed&quot;</string>
+   </property>
+  </action>
+  <action name="notificationsound">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Notification sound</string>
    </property>
   </action>
  </widget>

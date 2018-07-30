@@ -5,7 +5,7 @@
 ## The basics
 **Disposable is an anonymous, cryptographically secure, semi-decentralized and multiplatform instant messaging program written in Python.**
 
-It's based on nodes, which act as intermediaries between clients. These nodes are in charge of delievering the encrypted messages, [https://git.jlxip.net/jlxip/Disposable-Node](and anyone can run one). The clients and the nodes share a common protocol, specifically designed for keeping the transmission anonymous and encrypted, with some clever security protections that make Man In The Middle attacks and malicious nodes impossible to run. If you are interested in the protocol, have a look at the node README.
+It's based on nodes, which act as intermediaries between clients. These nodes are in charge of delievering the encrypted messages, [and anyone can run one](https://git.jlxip.net/jlxip/Disposable-Node). The clients and the nodes share a common protocol, specifically designed for keeping the transmission anonymous and encrypted, with some clever security protections that make Man In The Middle attacks and malicious nodes impossible to run. If you are interested in the protocol, have a look at the node README.
 
 To connect to a node, you have to get its `node.dat` file via a secure channel (such as HTTPS), which contains the IP of the node, the port, and a public key for making the secure transmission of messages.
 

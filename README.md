@@ -39,7 +39,7 @@ C:\Python27\Scripts\easy_install.exe http://www.voidspace.org.uk/python/pycrypto
 
 Alternatively, if you encounter any error during installation, you can try installing the MSI files. [This one](http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win-amd64-py2.7.msi) for x86_64, or [this one](http://www.voidspace.org.uk/python/pycrypto-2.6.1/pycrypto-2.6.1.win32-py2.7.msi) for x86.
 
-Then, you have to install PyQt4. You can try [going here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyqt4), and downloading either _PyQt4‑4.11.4‑cp27‑cp27m‑win_amd64.whl_ (x86_64) or _PyQt4‑4.11.4‑cp27‑cp27m‑win32.whl_ (x86), depending on your architecture. However, that website is terribly slow, so I've updated them to my server, so you can have a decent download speed. [This one](https://jlxip.net/mirror/PyQt4-4.11.4-cp27-cp27m-win_amd64.whl) for x86_64 and [this one](https://jlxip.net/mirror/PyQt4-4.11.4-cp27-cp27m-win32.whl) for x86.
+Then, you have to install PyQt4. You can try [going here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyqt4), and downloading either _PyQt4‑4.11.4‑cp27‑cp27m‑win\_amd64.whl_ (x86_64) or _PyQt4‑4.11.4‑cp27‑cp27m‑win32.whl_ (x86), depending on your architecture. However, that website is terribly slow, so I've updated them to my server, so you can have a decent download speed. [This one](https://jlxip.net/mirror/PyQt4-4.11.4-cp27-cp27m-win_amd64.whl) for x86_64 and [this one](https://jlxip.net/mirror/PyQt4-4.11.4-cp27-cp27m-win32.whl) for x86.
 
 Finally, in the directory of the download, run:
 

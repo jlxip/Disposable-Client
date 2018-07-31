@@ -420,42 +420,42 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		DB.commit()
 
-		notificated = False
-
+		notified = False
 		# If the chat is open, update it
 		try:
 			if self.chats[self.chatslist.selectedIndexes()[0].row()][0] == msg_from:
 				self.updateMessages()
 		except:
 			# If not, add its CID to UNREAD_CHATS
-			UNREAD_CHATS.append(msg_from)
+			if not msg_from in UNREAD_CHATS:
+				UNREAD_CHATS.append(msg_from)
 			# And also, notify
 			if PREFERENCES['notification']:
 				mixer.music.play()
-			notificated = True
+			notified = True
 			# Finally set the new window icon
 			self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
 
 		# If the tab is not selected, notify
-		if not notificated:
+		if not notified:
 			if not self.tabs.currentIndex() == self.tabIndex:
 				self.tabs.setTabText(self.tabIndex, '*'+self.ALIAS)
 				# And play the sound
 				if PREFERENCES['notification']:
 					mixer.music.play()
-				notificated = True
+				notified = True
 				# And set the new window icon
 				self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
 
 		# If the window is not focused, notify
-		if not notificated:
+		if not notified:
 			if not self.parent.isFocused:
 				if PREFERENCES['notification']:
 					mixer.music.play()
-			# And set the new window icon
-			self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
-			# And let the window know that the icon has been changed because of this
-			self.parent.iconChangedBecauseOfFocus = True
+				# And set the new window icon
+				self.parent.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/newmessages.png')))
+				# And let the window know that the icon has been changed because of this
+				self.parent.iconChangedBecauseOfFocus = True
 
 		self.updateChatsList()
 
@@ -470,7 +470,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		super(mainwindow, self).__init__(None)
 		self.setupUi(self)
 		self.center()
-		self.setFocusPolicy(QtCore.Qt.StrongFocus)
+		self.installEventFilter(self)
 		self.isFocused = True
 		self.iconChangedBecauseOfFocus = False
 
@@ -486,14 +486,15 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.decreasefontsize.triggered.connect(self.fontsizeminus)
 		self.notificationsound.triggered.connect(self.switchnotification)
 
-	def focusInEvent(self, evnt):
-		self.isFocused = True
-		if self.iconChangedBecauseOfFocus:
-			self.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/256x256.png')))
-			self.iconChangedBecauseOfFocus = False
-
-	def focusOutEvent(self, evt):
-		self.isFocused = False
+	def eventFilter(self, obj, evt):
+		if evt.type() == QtCore.QEvent.WindowDeactivate:
+			self.isFocused = False
+		elif evt.type() == QtCore.QEvent.WindowActivate:
+			self.isFocused = True
+			if self.iconChangedBecauseOfFocus:
+				self.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/256x256.png')))
+				self.iconChangedBecauseOfFocus = False
+		return False
 
 	def center(self):
 		frameGm = self.frameGeometry()

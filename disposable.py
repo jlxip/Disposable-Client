@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata
 from PyQt4 import QtCore, QtGui, uic
 from pygame import mixer
 from threading import Thread
@@ -326,6 +326,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		msg_content = str(self.writemsg.text().toUtf8())	# As a string, to encrypt it
 		if msg_content == '':
 			return
+
+		# Fix text
+		msg_content = unzalgo.fixZalgo(unicodedata.normalize('NFD', unicode(msg_content, encoding='utf-8')))
+		msg_content = str(msg_content.encode('utf-8'))
 
 		_ = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		msg_to = _[0]

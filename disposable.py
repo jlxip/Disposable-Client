@@ -328,6 +328,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 			return
 
 		# Fix text
+		msg_content = msg_content.strip()	# Remove leading spaces
 		msg_content = unzalgo.fixZalgo(unicodedata.normalize('NFD', unicode(msg_content, encoding='utf-8')))
 		msg_content = str(msg_content.encode('utf-8'))
 
@@ -406,6 +407,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 		# 'msg_content' is encrypted with 'msg_key'.
 		# As we're using a random symmetric key for each message, there's no need to use a random IV.
 		msg_content = cryptic.decrypt(msg_key, chr(0)*16, msg_content)
+
+		# Fix text
+		msg_content = msg_content.strip()	# Remove leading spaces
+		msg_content = unzalgo.fixZalgo(unicodedata.normalize('NFD', unicode(msg_content, encoding='utf-8')))
+		msg_content = str(msg_content.encode('utf-8'))
+
 		# It's converted into unicode, so that it can be inserted into the database
 		msg_content = unicode(msg_content, encoding='utf-8')
 

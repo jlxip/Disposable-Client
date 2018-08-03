@@ -372,24 +372,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT, ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
 			messages.append(i)
 
-		# So, basically, let me explain how this works.
-		# When a download file button is clicked, it changes the clipboard.
-		# The content of the clipboard will look like: '[_F_]!'+SIZE+'|'+URL.
-		# The program is listening for any change in the clipboard, if it's formatted that way, it downloads the file and all that.
-		# The method copyToClp was obtained here: https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript
-		html = '''
-		<!DOCTYPE HTML>
-		<HTML>
-		<head>
-		<script>function copyToClp(e){var o;(e=document.createTextNode(e),document.body.appendChild(e),document.body.createTextRange)?((o=document.body.createTextRange()).moveToElementText(e),o.select(),document.execCommand("copy")):((o=document.createRange()).selectNodeContents(e),window.getSelection().removeAllRanges(),window.getSelection().addRange(o),document.execCommand("copy"),window.getSelection().removeAllRanges());e.remove()}</script>
-		<script>
-			function a(){
-				document.write('Lamao')
-			}
-		</script>
-		</head>
-		<body>
-		'''
+		html = ''
 		show = []
 		for i in messages:
 			# Before 'You' was self.ALIAS, but that might be confusing to the user.
@@ -446,7 +429,6 @@ class identitytab(QtGui.QWidget, identity_ui):
 			shown = '[%s] &lt;%s&gt; %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, content)
 			show.append(shown)
 		html += '<br>'.join(show)
-		html += '</body></HTML>'
 		self.messages.setHtml(html)
 
 		# Scroll to the bottom

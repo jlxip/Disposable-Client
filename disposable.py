@@ -1,16 +1,19 @@
 #!/usr/bin/env python2.7
 # -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata, urllib2, struct
 from PyQt4 import QtCore, QtGui, uic
 from pygame import mixer
 from threading import Thread
+from StringIO import StringIO
 
 UIdirectory = 'UI'+os.sep
 mainwindow_fc = uic.loadUiType(UIdirectory+'mainwindow.ui')[0]
 identity_ui = uic.loadUiType(UIdirectory+'identity.ui')[0]
 invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
 identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
+sendfile_ui = uic.loadUiType(UIdirectory+'sendfile.ui')[0]
+downloadingdialog_ui = uic.loadUiType(UIdirectory+'downloading.ui')[0]
 
 def connectToNode():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,6 +59,134 @@ def authenticate(CID, priv):
 	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, random))
 	return (s, cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == '\x00', thisAES, thisIV)
 
+class downloadingdialog(QtGui.QDialog, downloadingdialog_ui):
+	def __init__(self, parent):
+		super(downloadingdialog, self).__init__(parent)
+		self.setupUi(self)
+
+def escapeHTMLString(s):
+	return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+sizeToStringAppends = [' bytes', 'kB', 'MB', 'GB']
+def sizeToString(size_):
+	try:
+		size = float(size_)
+		ret = ''
+		k = 0
+		while not int(size) == 0:
+			size /= 1000	# I just learned that 1kB=1000 bytes. I always thought it was 1024 bytes. Weird.
+			k += 1
+		size *= 1000; k -= 1
+		if not k < len(sizeToStringAppends):
+			return 'more that 1TB'
+		size = str(size)
+		return size[:size.index('.')+3]+sizeToStringAppends[k]
+	except:
+		return False
+
+class BufferReader(StringIO):
+	# Note: this class was stolen from http://foobarnbaz.com/2012/12/31/file-upload-progressbar-in-pyqt/
+
+    def __init__(self, buf='', callback=None, cb_args=(), cb_kwargs={}):
+        self._callback = callback
+        self._cb_args = cb_args
+        self._cb_kwargs = cb_kwargs
+        self._progress = 0
+        StringIO.__init__(self, buf)
+
+    def read(self, n=-1):
+        chunk = StringIO.read(self, n)
+        self._progress += int(len(chunk))
+        self._cb_kwargs.update({'progress': self._progress})
+        try:
+        	self._callback(*self._cb_args, **self._cb_kwargs)
+        except:
+            raise
+        return chunk
+
+def update_progress(progressbar, size, progress=None):
+	if progressbar.wasCanceled():
+		raise
+	progressbar.setValue(progress)
+
+class sendfile(QtGui.QDialog, sendfile_ui):
+	def __init__(self, parent, ALIAS, PUB):
+		super(sendfile, self).__init__(parent)
+		self.setupUi(self)
+		self.parent = parent
+		self.PUB = PUB
+		self.hint.setText('Send a file to %s.' % ALIAS)
+		self.selectfile_btn.clicked.connect(self.selectfile)
+		self.uploadfile_btn.clicked.connect(self.uploadfile)
+
+	def selectfile(self):
+		f = QtGui.QFileDialog.getOpenFileName()
+		if f == '':
+			return
+		self.selectedfile.setText(f)
+		self.uploadfile_btn.setEnabled(True)
+
+	def uploadfile(self):
+		f = str(self.selectedfile.text().toUtf8())
+		if not os.path.isfile(f):
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('File not found.')
+			msg.exec_()
+			return
+		_FILENAME = f.split(os.sep)[-1]
+		FILENAME = urllib2.quote(_FILENAME)
+		with open(f, 'rb') as f:
+			data = f.read()
+
+		# Insert into my files
+		global DB
+		cursor = DB.cursor()
+		cursor.execute(
+			"INSERT INTO FILES (NAME, SIZE, CONTENT) VALUES (?, ?, ?)",
+			(_FILENAME, len(data), base64.b64encode(data))
+		)
+		for i in cursor.execute("SELECT ID FROM FILES ORDER BY ID DESC LIMIT 1"):
+			fileID = i[0]
+
+		# Encrypt file (same procedure as sendMessage)
+		thisFileAES = cryptic.genRandomAESKey()	# First, generate a random AES key
+		data = cryptic.encrypt(thisFileAES, chr(0)*16, data)	# Encrypt 'data' with the AES key
+		thisFileAES = self.PUB.encrypt(thisFileAES)	# Encrypt the AES key with their public key
+		data = struct.pack('>I', len(thisFileAES)) + thisFileAES + data
+
+		SIZE = len(data)
+
+		progressDialog = QtGui.QProgressDialog('Uploading %s...' % FILENAME, QtCore.QString('Cancel'), 0, SIZE)
+		progressDialog.setWindowTitle('Upload status')
+		progressDialog.setWindowModality(QtCore.Qt.WindowModal);
+		databuf = BufferReader(buf=data, callback=update_progress, cb_args=(progressDialog, SIZE))
+
+		# Upload the actual file
+		req = urllib2.Request('https://transfer.sh/'+FILENAME, databuf, {'Content-Length': SIZE})
+		req.get_method = lambda: 'PUT'
+		try:
+			urlobj = urllib2.urlopen(req)
+		except:
+			return
+		result = urlobj.read()	# Get the URL of the file
+
+		self.parent.writemsg.setText('[_F_]!'+str(SIZE)+'|'+result)
+		self.parent.sendMessage()
+
+		# Update my messages
+		for i in cursor.execute(
+			"SELECT ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY ID DESC LIMIT 1",
+			(self.parent.ME, self.parent.chats[self.parent.chatslist.selectedIndexes()[0].row()][0])
+		):
+			messageID = i[0]
+		cursor.execute("UPDATE MESSAGES SET CONTENT=? WHERE ID=?", ('[_FR_]!'+str(fileID), messageID))
+		DB.commit()
+
+		self.parent.updateMessages()
+
+		self.close()
+
 class invalidtab(QtGui.QWidget, invalid_ui):
 	def __init__(self):
 		super(invalidtab, self).__init__(None)
@@ -99,6 +230,8 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.chatslist.customContextMenuRequested.connect(self.chatOptions)
 		self.writemsg.textEdited.connect(self.sendWritingSignal)
 		self.writemsg.returnPressed.connect(self.sendMessage)
+		self.sendfile_btn.clicked.connect(self.sendfileclicked)
+		self.messages.anchorClicked.connect(self.anchorclicked)
 
 		global PREFERENCES
 		self.messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
@@ -115,6 +248,86 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.connect(thread, thread.signal, self.messageReceived)
 		thread.start()
 
+	def anchorclicked(self, url_):
+		global DB
+		cursor = DB.cursor()
+		url = str(url_.toString())
+
+		if url[:6] == '[_F_]!':
+			url = url[6:].split('|')
+			size = int(url[0])
+			id = url[2]
+			url = url[1]
+			filename = url.split('/')[-1]
+			# The url was decoded when it passed through the anchor. Now, encode it again.
+			url = url[:url.index(filename)] + urllib2.quote(filename)
+
+			# Download
+			downloading = downloadingdialog(self)
+			downloading.show()
+			response = urllib2.urlopen(url)
+			data = response.read()
+			downloading.close()
+
+			# Decrypt (same procedure as in messageReceived)
+			keylength = struct.unpack('>I', data[:4])[0]
+			data = data[4:]
+			msg_key = cryptic.getRSACipher(self.PRIV).decrypt(data[:keylength])
+			msg_content = cryptic.decrypt(msg_key, chr(0)*16, data[keylength:])
+
+			msg_content = base64.b64encode(msg_content)
+
+			# Insert into database
+			THEY = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
+			cursor.execute(
+				"INSERT INTO FILES (NAME, SIZE, CONTENT) VALUES (?, ?, ?)",
+				(filename, str(size), msg_content)
+			)
+
+			# Get the ID of the inserted file
+			for i in cursor.execute("SELECT ID FROM FILES ORDER BY ID DESC LIMIT 1"):
+				insertedID = i[0]
+
+			# Update database
+			cursor.execute("UPDATE MESSAGES SET CONTENT=? WHERE ID=?", ('[_FR_]!'+str(insertedID), id))
+
+			DB.commit()
+
+			# Update messages
+			self.updateMessages()
+		elif url[:4] == 'COPY':
+			for i in cursor.execute("SELECT NAME, CONTENT FROM FILES WHERE ID=?", (url[4:],)):
+				filename = i[0]
+				content = base64.b64decode(i[1])
+			f = QtGui.QFileDialog.getSaveFileName(self, "Save file", filename)
+			if f == '':
+				return
+
+			with open(f, 'wb') as file:
+				file.write(content)
+
+		elif url[:6] == 'DELETE':
+			ID = url[6:]
+			# First, get the name of the file.
+			for i in cursor.execute("SELECT NAME FROM FILES WHERE ID=?", (ID,)):
+				filename = i[0]
+			# Then, remove the file.
+			cursor.execute("DELETE FROM FILES WHERE ID=?", (ID,))
+			# Finally, update the message.
+			cursor.execute(
+				"UPDATE MESSAGES SET CONTENT=? WHERE CONTENT=?",
+				('_You removed this file (%s)._' % filename, '[_FR_]!'+ID)
+			)
+			DB.commit()
+
+			# Update messages
+			self.updateMessages()
+
+	def sendfileclicked(self):
+		selected = self.chats[self.chatslist.selectedIndexes()[0].row()]
+		sendfile(self, selected[1], selected[2]).show()
+		return
+
 	def sendWritingSignal(self):
 		CID = self.chats[self.chatslist.selectedIndexes()[0].row()][0]
 		data.send_msg(self.SEND, cryptic.encrypt(self.thisAES, self.thisIV, '\x00'+CID))
@@ -126,6 +339,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.messages.setEnabled(True)
 		self.writemsg.setEnabled(True)
 		self.writemsg.setPlaceholderText('Write something to '+self.chats[selected][1])
+		self.sendfile_btn.setEnabled(True)
 
 		if self.chats[selected][0] in UNREAD_CHATS:
 			UNREAD_CHATS.pop(selected)
@@ -151,17 +365,85 @@ class identitytab(QtGui.QWidget, identity_ui):
 		cursor = DB.cursor()
 		messages = []
 		# WARNING: IT NEEDS A FUCKING LIMIT
-		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
+		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT, ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
 			messages.append(i)
 
-		# Show messages in 'messages' (QListView)
+		# So, basically, let me explain how this works.
+		# When a download file button is clicked, it changes the clipboard.
+		# The content of the clipboard will look like: '[_F_]!'+SIZE+'|'+URL.
+		# The program is listening for any change in the clipboard, if it's formatted that way, it downloads the file and all that.
+		# The method copyToClp was obtained here: https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript
+		html = '''
+		<!DOCTYPE HTML>
+		<HTML>
+		<head>
+		<script>function copyToClp(e){var o;(e=document.createTextNode(e),document.body.appendChild(e),document.body.createTextRange)?((o=document.body.createTextRange()).moveToElementText(e),o.select(),document.execCommand("copy")):((o=document.createRange()).selectNodeContents(e),window.getSelection().removeAllRanges(),window.getSelection().addRange(o),document.execCommand("copy"),window.getSelection().removeAllRanges());e.remove()}</script>
+		<script>
+			function a(){
+				document.write('Lamao')
+			}
+		</script>
+		</head>
+		<body>
+		'''
 		show = []
 		for i in messages:
 			# Before 'You' was self.ALIAS, but that might be confusing to the user.
-			who = 'You' if i[1] == 0 else selected[1]
-			shown = '[%s] <%s> %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, i[2])
+			who = 'You' if i[1] == 0 else escapeHTMLString(selected[1])
+			content = i[2]
+			if content[:6] == '[_F_]!':
+				# It's a file to download.
+				try:
+					SIZE = sizeToString(int(content[6:].split('|')[0]))
+					URL = content[6:].split('|')[1]
+					FILENAME = escapeHTMLString(urllib2.unquote(URL.split('/')[-1]))
+					content = '<a href=\''+content+'|'+str(i[3])+'\'>Download "'+FILENAME+'" ('+SIZE+')</a>'
+				except:
+					content = '<i>This message is poorly formatted. Maybe you are using an old version of Disposable.</i>'
+			elif content[:7] == '[_FR_]!':
+				# It's a downloaded file.
+				try:
+					ID = content[7:]
+					for j in cursor.execute("SELECT NAME, SIZE FROM FILES WHERE ID=?", (ID,)):
+						FILENAME = j[0]
+						SIZE = j[1]
+					content = '<a href=\'COPY'+ID+'\'>Copy "'+FILENAME+'"</a> <a href=\'DELETE'+ID+'\'>Delete</a>'
+				except:
+					content = '<i>This message is poorly formatted. Maybe you are using an old version of Disposable.</i>'
+			else:
+				# It's not.
+				content = escapeHTMLString(content)
+				content = content.replace('****', '')
+				content = content.replace('__', '')
+				bolds = content.split('**')
+				if not len(bolds) % 2 == 0:
+					content = ''
+					for j in range(len(bolds)):
+						if j % 2 == 0:
+							content += bolds[j]
+						else:
+							content += '<b>'
+							content += bolds[j]
+							content += '</b>'
+				content = content.replace('\\*', '*')
+				content = content.replace('\\_', '\x00')
+				italics = content.split('_')
+				if not len(italics) % 2 == 0:
+					content = ''
+					for j in range(len(italics)):
+						if j % 2 == 0:
+							content += italics[j]
+						else:
+							content += '<i>'
+							content += italics[j]
+							content += '</i>'
+				content = content.replace('\x00', '_')
+
+			shown = '[%s] &lt;%s&gt; %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, content)
 			show.append(shown)
-		self.messages.setPlainText('\n'.join(show))
+		html += '<br>'.join(show)
+		html += '</body></HTML>'
+		self.messages.setHtml(html)
 
 		# Scroll to the bottom
 		self.messages.moveCursor(QtGui.QTextCursor.End)
@@ -357,7 +639,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		# Insert the message into the database
 		global DB
 		cursor = DB.cursor()
-		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_to, time.time(), 0, _))
+		cursor.execute("INSERT INTO MESSAGES (ME, THEY, TIMESTAMP, WHO, CONTENT) VALUES (?, ?, ?, ?, ?)", (self.ME, msg_to, int(time.time()), 0, _))
 
 		# Update LAST in CHATS
 		cursor.execute("UPDATE CHATS SET LAST=? WHERE ME=? AND THEY=?", (time.time(), self.ME, msg_to))
@@ -686,6 +968,7 @@ if __name__ == '__main__':
 		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
 		cursor.execute("CREATE TABLE 'PUBS' ('CID' TEXT PRIMARY KEY, 'PUB' TEXT)")
 		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
+		cursor.execute("CREATE TABLE 'FILES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'NAME' TEXT, 'SIZE' TEXT, 'CONTENT' TEXT)")
 		DB.commit()
 
 	# Load preferences

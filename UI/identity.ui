@@ -37,7 +37,20 @@
      </property>
     </widget>
    </item>
-   <item row="3" column="2" colspan="2">
+   <item row="0" column="1" rowspan="2" colspan="3">
+    <widget class="QTextBrowser" name="messages">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="openExternalLinks">
+      <bool>false</bool>
+     </property>
+     <property name="openLinks">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
     <widget class="QLineEdit" name="writemsg">
      <property name="enabled">
       <bool>false</bool>
@@ -47,14 +60,23 @@
      </property>
     </widget>
    </item>
-   <item row="0" column="2" rowspan="2" colspan="2">
-    <widget class="QTextBrowser" name="messages">
+   <item row="3" column="2">
+    <widget class="QPushButton" name="sendfile_btn">
      <property name="enabled">
       <bool>false</bool>
      </property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>FILE</string>
+     </property>
     </widget>
    </item>
-   <item row="2" column="2" colspan="2">
+   <item row="2" column="1" colspan="3">
     <widget class="QLabel" name="writing">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">

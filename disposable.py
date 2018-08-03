@@ -15,6 +15,8 @@ identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 sendfile_ui = uic.loadUiType(UIdirectory+'sendfile.ui')[0]
 downloadingdialog_ui = uic.loadUiType(UIdirectory+'downloading.ui')[0]
 
+messagesFontFamily = 'Monospace'
+
 def connectToNode():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	try:
@@ -232,9 +234,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.writemsg.returnPressed.connect(self.sendMessage)
 		self.sendfile_btn.clicked.connect(self.sendfileclicked)
 		self.messages.anchorClicked.connect(self.anchorclicked)
+		self.writemsg.setFont(QtGui.QFont(messagesFontFamily))
 
 		global PREFERENCES
-		self.messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
+		self.messages.setFont(QtGui.QFont(messagesFontFamily, PREFERENCES['font-size']))
 
 		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
 		if not _result:
@@ -805,13 +808,13 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		PREFERENCES['font-size'] += 1
 		self.writePreferences()
 		for i in range(1, self.identitiestab.count()):
-			self.identitiestab.widget(i).messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
+			self.identitiestab.widget(i).messages.setFont(QtGui.QFont(messagesFontFamily, PREFERENCES['font-size']))
 
 	def fontsizeminus(self):
 		PREFERENCES['font-size'] -= 1
 		self.writePreferences()
 		for i in range(1, self.identitiestab.count()):
-			self.identitiestab.widget(i).messages.setFont(QtGui.QFont('Sans', PREFERENCES['font-size']))
+			self.identitiestab.widget(i).messages.setFont(QtGui.QFont(messagesFontFamily, PREFERENCES['font-size']))
 
 	def switchnotification(self):
 		PREFERENCES['notification'] = not PREFERENCES['notification']

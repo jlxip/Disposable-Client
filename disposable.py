@@ -322,6 +322,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 				('_You removed this file (%s)._' % filename, '[_FR_]!'+ID)
 			)
 			DB.commit()
+			cursor.execute("VACUUM")
 
 			# Update messages
 			self.updateMessages()

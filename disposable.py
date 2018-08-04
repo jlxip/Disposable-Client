@@ -159,7 +159,7 @@ class sendfile(QtGui.QDialog, sendfile_ui):
 
 		SIZE = len(data)
 
-		progressDialog = QtGui.QProgressDialog('Uploading %s...' % FILENAME, QtCore.QString('Cancel'), 0, SIZE)
+		progressDialog = QtGui.QProgressDialog('Uploading %s...' % FILENAME, QtCore.QString('Cancel'), 0, SIZE, self)
 		progressDialog.setWindowTitle('Upload status')
 		progressDialog.setWindowModality(QtCore.Qt.WindowModal);
 		databuf = BufferReader(buf=data, callback=update_progress, cb_args=(progressDialog, SIZE))

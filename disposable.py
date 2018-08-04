@@ -554,6 +554,12 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 			self.updateChatsList()	# Finally, update the chats list
 
+			self.messages.setHtml('')
+			self.writemsg.setPlaceholderText('')
+			self.messages.setEnabled(False)
+			self.writemsg.setEnabled(False)
+			self.sendfile_btn.setEnabled(False)
+
 	def newchat(self):
 		THEY = str(QtGui.QInputDialog.getText(self, 'New chat', 'Enter the identity:')[0])
 		if THEY == '':

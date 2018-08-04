@@ -54,6 +54,12 @@ And install PyGame and Numpy as well:
 C:\Python27\Scripts\pip.exe install pygame numpy
 ```
 
+If you run Disposable now, there will be an issue with file transfers in Windows. You can fix this by installing the Let's Encrypt certificate. Go [here](https://transfer.sh), and follow these instructions:
+
+If you use Firefox, click at the green lock at the left of the URL, click the arrow and "More information". Then, hit "View certificate", "Details", "Let's Encrypt Authority X3" and save it with "Export". Then, open the file, and install the certificate.
+
+If you use Chrome, it's pretty much the same deal.
+
 ## Running
 In order to run it, you just have to do:
 

@@ -74,6 +74,8 @@
     <addaction name="showhash_btn"/>
     <addaction name="renameidentity_btn"/>
     <addaction name="deleteidentity_btn"/>
+    <addaction name="separator"/>
+    <addaction name="nodes_btn"/>
    </widget>
    <widget class="QMenu" name="menuPreferences">
     <property name="title">
@@ -170,6 +172,11 @@
    </property>
    <property name="text">
     <string>Notification sound</string>
+   </property>
+  </action>
+  <action name="nodes_btn">
+   <property name="text">
+    <string>Nodes</string>
    </property>
   </action>
  </widget>

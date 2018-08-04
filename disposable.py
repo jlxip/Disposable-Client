@@ -14,25 +14,43 @@ invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
 identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 sendfile_ui = uic.loadUiType(UIdirectory+'sendfile.ui')[0]
 downloadingdialog_ui = uic.loadUiType(UIdirectory+'downloading.ui')[0]
+managenodes_ui = uic.loadUiType(UIdirectory+'managenodes.ui')[0]
+newidentity_ui = uic.loadUiType(UIdirectory+'newidentity.ui')[0]
 
 messagesFontFamily = 'Monospace'
 
-def connectToNode():
+def connectToNode(NodeNAME, NodeIP, NodePORT):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	try:
-		s.connect((NODE[0], NODE[1]))
+		s.connect((NodeIP, int(NodePORT)))
 	except:
 		msg = QtGui.QMessageBox()
 		msg.setIcon(QtGui.QMessageBox.Critical)
-		msg.setText('Disposable could not connect to the node.')
-		msg.setInformativeText('Check if your \'node.dat\' file is correct.')
+		msg.setText('Disposable could not connect to the node "%s".' % NodeNAME)
 		msg.exec_()
-		exit()
+		return False
 	return s
 
-def keyExchange():
-	s = connectToNode()
-	pub = cryptic.getRSACipher(NODE[2])
+def keyExchange(NODE):
+	# Get node data
+	NodeNAME = ''
+	NodeIP = ''
+	NodePORT = -1
+	NodePUB = ''
+
+	global DB
+	try:
+		cursor = DB.cursor()
+	except:
+		cursor = sqlite3.connect('database').cursor()
+	for i in cursor.execute("SELECT NAME, IP, PORT, PUB FROM NODES WHERE ID=?", (NODE,)):
+		NodeNAME, NodeIP, NodePORT, NodePUB = i[0], i[1], i[2], i[3]
+
+	s = connectToNode(NodeNAME, NodeIP, NodePORT)
+	if not s:
+		return False
+
+	pub = cryptic.getRSACipher(NodePUB)
 	thisAES = cryptic.genRandomAESKey()
 	thisIV = cryptic.genIV()
 	data.send_msg(s, pub.encrypt(thisAES+thisIV))
@@ -42,12 +60,11 @@ def keyExchange():
 	else:
 		return False
 
-def authenticate(CID, priv):
+def authenticate(NODE, CID, priv):
 	try:
-		s, thisAES, thisIV = keyExchange()
+		s, thisAES, thisIV = keyExchange(NODE)
 	except:
-		print 'Something went horribly wrong (AUTH).'
-		exit()
+		return (None, False, None, None)
 	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x01'+CID))
 	random = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
 	if random == '\x01':
@@ -60,6 +77,158 @@ def authenticate(CID, priv):
 	random = tmpcipher.decrypt(random)
 	data.send_msg(s, cryptic.encrypt(thisAES, thisIV, random))
 	return (s, cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == '\x00', thisAES, thisIV)
+
+def getNodes():
+	global DB
+	cursor = DB.cursor()
+
+	model = QtGui.QStandardItemModel()
+	nodes = []
+	for i in cursor.execute("SELECT ID, NAME FROM NODES"):
+		nodes.append(i)
+		item = QtGui.QStandardItem(i[1])
+		item.setEditable(False)
+		item.setFont(QtGui.QFont('Sans', 15))
+		model.appendRow(item)
+
+	return nodes, model
+
+class newidentity(QtGui.QDialog, newidentity_ui):
+	def __init__(self, parent):
+		super(newidentity, self).__init__(parent)
+		self.setupUi(self)
+		self.parent = parent
+
+		# Update nodes
+		self.nodes, model = getNodes()
+		self.nodeslist.setModel(model)
+
+		self.create_btn.clicked.connect(self.create)
+
+	def create(self):
+		# Get selected item in the list
+		try:
+			selected = self.nodes[self.nodeslist.selectedIndexes()[0].row()][0]
+		except:
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('You have to select a node.')
+			msg.exec_()
+			return
+
+		try:
+			s, thisAES, thisIV = keyExchange(selected)
+		except:
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('The identity could not be create (NO-KEY-EXCHANGE).')
+			msg.exec_()
+			return
+
+		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x00'))
+		if not cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == '\x00':
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('The identity could not be create (BAD-PROTOCOL).')
+			msg.exec_()
+			return
+		while True:
+			priv, pub = cryptic.genPairOfKeys()
+			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, pub))
+			response = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
+			if response == '\x00':
+				CID = hashlib.md5(pub).hexdigest()
+				break
+		s.close()
+
+		# Insert into database
+		global DB
+		cursor = DB.cursor()
+		cursor.execute("INSERT INTO IDENTITIES (CID, PRIV, ALIAS, NODE) VALUES (?, ?, ?, ?)", (CID, priv, CID.upper()[:8], selected))
+		DB.commit()
+
+		# Everything went fine.
+		self.parent.loadIdentities()
+		self.close()
+
+class managenodes(QtGui.QDialog, managenodes_ui):
+	def __init__(self, parent):
+		super(managenodes, self).__init__(parent)
+		self.setupUi(self)
+
+		self.updateNodes()
+
+		self.addnode_btn.clicked.connect(self.addnode)
+
+	def updateNodes(self):
+		self.nodes, model = getNodes()
+		self.nodeslist.setModel(model)
+
+	def addnode(self):
+		f = QtGui.QFileDialog.getOpenFileName(self, 'Select a node connection file')
+		if f == '':
+			return
+
+		if not os.path.isfile(f):
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('This file does not exist.')
+			msg.exec_()
+			return
+
+		with open(f, 'r') as file:
+			NODE = file.read()
+
+		try:
+			NodeConnection = NODE[:NODE.find('\n')].split(':')
+			NodeIP = NodeConnection[0]
+			NodePORT = NodeConnection[1]
+			NodePUB = NODE[NODE.find('\n')+1:]
+		except:
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('This node connection file is invalid.')
+			msg.exec_()
+			return
+
+		# Check if there is already a node with the same IP and port
+		global DB
+		cursor = DB.cursor()
+		isAlready = False
+		for i in cursor.execute("SELECT 1 FROM NODES WHERE IP=? AND PORT=?", (NodeIP, NodePORT)):
+			isAlready = True
+		if isAlready:
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('This node is already in the database. Please, delete it first.')
+			msg.exec_()
+			return
+
+		# Check the connection to the node
+		s = connectToNode('', NodeIP, NodePORT)
+		if not s:
+			return
+		data.send_msg(s, '\x00')
+		s.close()
+
+		# Ask the name
+		NodeNAME = str(QtGui.QInputDialog.getText(self, 'Node name', 'Give a name to this node:')[0])
+		if NodeNAME == '':
+			msg = QtGui.QMessageBox()
+			msg.setIcon(QtGui.QMessageBox.Critical)
+			msg.setText('You have to give a name to the node.')
+			msg.exec_()
+			return
+
+		# Insert into the database
+		cursor.execute(
+			"INSERT INTO NODES (NAME, IP, PORT, PUB) VALUES (?, ?, ?, ?)",
+			(NodeNAME, NodeIP, NodePORT, NodePUB)
+		)
+		DB.commit()
+
+		# Update the list of nodes
+		self.updateNodes()
 
 class downloadingdialog(QtGui.QDialog, downloadingdialog_ui):
 	def __init__(self, parent):
@@ -200,7 +369,7 @@ class listenThread(QtCore.QThread):
 		self.signal = QtCore.SIGNAL('signal')
 		self.parent = parent
 	def run(self):
-		s, result, thisAES, thisIV = authenticate(self.parent.ME, self.parent.PRIV)
+		s, result, thisAES, thisIV = authenticate(self.parent.NODE, self.parent.ME, self.parent.PRIV)
 		if not result:
 			print 'Something went horribly wrong (LISTEN).'
 			exit()
@@ -215,10 +384,11 @@ class listenThread(QtCore.QThread):
 			self.emit(self.signal, r)
 
 class identitytab(QtGui.QWidget, identity_ui):
-	def __init__(self, ME, PRIV, ALIAS, tabIndex, parent):
+	def __init__(self, ME, PRIV, ALIAS, tabIndex, parent, NODE):
 		super(identitytab, self).__init__(None)
 		self.setupUi(self)
 		self.newchat_btn.clicked.connect(self.newchat)
+		self.NODE = NODE
 		self.ME = ME
 		self.PRIV = PRIV
 		self.ALIAS = ALIAS
@@ -239,7 +409,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		global PREFERENCES
 		self.messages.setFont(QtGui.QFont(messagesFontFamily, PREFERENCES['font-size']))
 
-		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.ME, self.PRIV)
+		self.SEND, _result, self.thisAES, self.thisIV = authenticate(self.NODE, self.ME, self.PRIV)
 		if not _result:
 			print 'Something went horribly wrong (NOT-AUTHENTICATE).'
 			exit()
@@ -461,7 +631,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 				PUB = j[0]
 			if not PUB:
 				# Request it from the node
-				s, result, thisAES, thisIV = authenticate(self.ME, self.PRIV)
+				s, result, thisAES, thisIV = authenticate(self.NODE, self.ME, self.PRIV)
 				if not result:
 					print 'Something went horribly wrong (UPDATE-CHATS).'
 					exit()
@@ -581,7 +751,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 			return
 
 		# Check if the identity exists in the node
-		result = authenticate(THEY, '')
+		result = authenticate(self.NODE, THEY, '')
 		if result[0] == None:
 			# It doesn't exist
 			msg = QtGui.QMessageBox()
@@ -750,10 +920,28 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.updateChatsList()
 
 class identityhash(QtGui.QDialog, identityhash_ui):
-	def __init__(self, parent, CID):
+	def __init__(self, parent, CID, NODE):
 		super(identityhash, self).__init__(parent)
 		self.setupUi(self)
+
+		# Get the node name
+		global DB
+		cursor = DB.cursor()
+		for i in cursor.execute("SELECT NAME, IP, PORT, PUB FROM NODES WHERE ID=?", (NODE,)):
+			self.NodeNAME, self.NodeIP, self.NodePORT, self.NodePUB = i[0], i[1], i[2], i[3]
+
+		self.node_lbl.setText('This identity is on the node <b>%s</b>.' % self.NodeNAME)
 		self.address_field.setText(CID)
+		self.copyncf_btn.clicked.connect(self.copyncf)
+
+	def copyncf(self):
+		f = QtGui.QFileDialog.getSaveFileName(self, "Save file", self.NodeNAME+'.dat')
+		if f == '':
+			return
+
+		content = self.NodeIP+':'+str(self.NodePORT)+'\n'+self.NodePUB
+		with open(f, 'wb') as file:
+			file.write(content)
 
 class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 	def __init__(self):
@@ -778,10 +966,14 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.showhash_btn.triggered.connect(self.showhash)
 		self.renameidentity_btn.triggered.connect(self.renameidentity)
 		self.deleteidentity_btn.triggered.connect(self.deleteidentity)
+		self.nodes_btn.triggered.connect(self.managenodes)
 
 		self.increasefontsize.triggered.connect(self.fontsizeplus)
 		self.decreasefontsize.triggered.connect(self.fontsizeminus)
 		self.notificationsound.triggered.connect(self.switchnotification)
+
+	def managenodes(self):
+		managenodes(self).show()
 
 	def eventFilter(self, obj, evt):
 		if evt.type() == QtCore.QEvent.WindowDeactivate:
@@ -826,55 +1018,31 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.identities = []
 		global DB
 		cursor = DB.cursor()
-		for i in cursor.execute("SELECT CID, PRIV, ALIAS FROM IDENTITIES"):
+		for i in cursor.execute("SELECT CID, PRIV, ALIAS, NODE FROM IDENTITIES"):
 			CID = i[0]
 			PRIV = i[1]
 			ALIAS = i[2]
+			NODE = i[3]
 
 			# Check if it's possible to authenticate
-			s, result, thisAES, thisIV = authenticate(CID, PRIV)
+			s, result, thisAES, thisIV = authenticate(NODE, CID, PRIV)
 			if s:
 				s.close()
-			self.identities.append([CID, PRIV, ALIAS, result])
+			self.identities.append([CID, PRIV, ALIAS, result, NODE])
 
 		# Add the tabs that are not already there (weird)
 		for i in range(self.identitiestab.count()-1, len(self.identities)):	# This might cause troubles in the future.
 			if self.identities[i][3]:
 				ALIAS = self.identities[i][2]
-				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS, i+1, self)
+				tab = identitytab(self.identities[i][0], self.identities[i][1], ALIAS, i+1, self, self.identities[i][4])
 			else:
 				ALIAS = '[INVALID] '+self.identities[i][2]
 				tab = invalidtab()
 			self.identitiestab.addTab(tab, ALIAS)
 
 	def newidentity(self):
-		try:
-			s, thisAES, thisIV = keyExchange()
-		except:
-			print 'Something went horribly wrong (NO-KEY-EXCHANGE).'
-			exit()
-
-		data.send_msg(s, cryptic.encrypt(thisAES, thisIV, '\x00'))
-		if not cryptic.decrypt(thisAES, thisIV, data.recv_msg(s)) == '\x00':
-			print 'Something went horribly wrong (BAD-PROTOCOL).'
-			exit()
-		while True:
-			priv, pub = cryptic.genPairOfKeys()
-			data.send_msg(s, cryptic.encrypt(thisAES, thisIV, pub))
-			response = cryptic.decrypt(thisAES, thisIV, data.recv_msg(s))
-			if response == '\x00':
-				CID = hashlib.md5(pub).hexdigest()
-				break
-		s.close()
-
-		# Insert into database
-		global DB
-		cursor = DB.cursor()
-		cursor.execute("INSERT INTO IDENTITIES (CID, PRIV, ALIAS) VALUES (?, ?, ?)", (CID, priv, CID.upper()[:8]))
-		DB.commit()
-
-		# Everything went fine. Update the identities and close the window.
-		self.loadIdentities()
+		newidentity(self).show()
+		#self.loadIdentities()
 
 	def tabChanged(self):
 		i = self.identitiestab.currentIndex()
@@ -892,8 +1060,10 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 				self.setWindowIcon(QtGui.QIcon(QtGui.QPixmap(':/Icons/256x256.png')))	# Set the window icon to "no messages"
 
 	def showhash(self):
-		CID = self.identities[self.identitiestab.currentIndex()-1][0]
-		identityhash(self, CID).show()
+		selected = self.identities[self.identitiestab.currentIndex()-1]
+		CID = selected[0]
+		NODE = selected[4]
+		identityhash(self, CID, NODE).show()
 
 	def renameidentity(self):
 		k = self.identitiestab.currentIndex()-1
@@ -923,7 +1093,7 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		if ret == QtGui.QMessageBox.Yes:
 			# Authenticate
 			k = self.identitiestab.currentIndex()-1
-			s, result, thisAES, thisIV = authenticate(self.identities[k][0], self.identities[k][1])
+			s, result, thisAES, thisIV = authenticate(self.identities[k][4], self.identities[k][0], self.identities[k][1])
 
 			if s and result:
 				# Send delete signal
@@ -946,17 +1116,6 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 			DB.commit()
 
 if __name__ == '__main__':
-	# Load the node data
-	if not os.path.isfile('node.dat'):
-		print '\'node.dat\' could not be found.'
-		exit()
-	global NODE
-	with open('node.dat', 'r') as f:
-		NODE = f.read()
-	NODE_CONNECTION = NODE[:NODE.find('\n')].split(':')
-	NODE_PUB = NODE[NODE.find('\n')+1:]
-	NODE = [NODE_CONNECTION[0], int(NODE_CONNECTION[1]), NODE_PUB]
-
 	# Connect to database
 	global DB
 	DB = sqlite3.connect('database')
@@ -968,7 +1127,8 @@ if __name__ == '__main__':
 		areTablesThere = True	# The tables already exist
 	if not areTablesThere:
 		# If the tables do not exist, create them
-		cursor.execute("CREATE TABLE 'IDENTITIES' ('CID' TEXT PRIMARY KEY, 'PRIV' TEXT, 'ALIAS' TEXT)")
+		cursor.execute("CREATE TABLE 'NODES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'NAME' TEXT, 'IP' TEXT, 'PORT' INTEGER, 'PUB' TEXT)")
+		cursor.execute("CREATE TABLE 'IDENTITIES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'CID' TEXT, 'NODE' TEXT, 'PRIV' TEXT, 'ALIAS' TEXT)")
 		cursor.execute("CREATE TABLE 'CHATS' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'ALIAS' TEXT, 'LAST' INTEGER)")
 		cursor.execute("CREATE TABLE 'PUBS' ('CID' TEXT PRIMARY KEY, 'PUB' TEXT)")
 		cursor.execute("CREATE TABLE 'MESSAGES' ('ID' INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 'ME' TEXT, 'THEY' TEXT, 'TIMESTAMP' INTEGER, 'WHO' INTEGER, 'CONTENT' TEXT)")
@@ -997,10 +1157,11 @@ if __name__ == '__main__':
 	app = QtGui.QApplication(sys.argv)
 	w = mainwindow()
 
-	# Check connection.
-	tmp = connectToNode()
-	data.send_msg(tmp, '\x00')
-	tmp.close()
+	# Check connection to every node.
+	for i in cursor.execute("SELECT NAME, IP, PORT FROM NODES"):
+		thisNode = connectToNode(i[0], i[1], i[2])
+		data.send_msg(thisNode, '\x00')
+		thisNode.close()
 
 	# Show the window
 	w.show()

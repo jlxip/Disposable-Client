@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>102</height>
+    <height>202</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,9 +18,26 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
+    <widget class="QLabel" name="node_lbl">
+     <property name="text">
+      <string>Loading...</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="copyncf_btn">
+     <property name="text">
+      <string>Click here to copy the node connection file</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>This is the hash of the chosen identity:</string>
+      <string>This is the hash:</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>

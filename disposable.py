@@ -129,14 +129,14 @@ class sendfile(QtGui.QDialog, sendfile_ui):
 		self.uploadfile_btn.setEnabled(True)
 
 	def uploadfile(self):
-		f = str(self.selectedfile.text().toUtf8())
+		f = unicode(str(self.selectedfile.text().toUtf8()), encoding='utf-8')
 		if not os.path.isfile(f):
 			msg = QtGui.QMessageBox()
 			msg.setIcon(QtGui.QMessageBox.Critical)
 			msg.setText('File not found.')
 			msg.exec_()
 			return
-		_FILENAME = f.split(os.sep)[-1]
+		_FILENAME = f.split('/')[-1]
 		FILENAME = urllib2.quote(_FILENAME)
 		with open(f, 'rb') as f:
 			data = f.read()
@@ -374,6 +374,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		html = '<style>* { font-family: monospace; }</style>\n'	# This makes monospaced font work in Windows
 		show = []
+		lastDate = ''
 		for i in messages:
 			# Before 'You' was self.ALIAS, but that might be confusing to the user.
 			who = 'You' if i[1] == 0 else escapeHTMLString(selected[1])
@@ -427,6 +428,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 				content = content.replace('\x00', '_')
 
 			shown = '[%s] &lt;%s&gt; %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, content)
+			thisDate = datetime.datetime.fromtimestamp(i[0]).strftime('%d/%m/%Y')
+			if not thisDate == lastDate:
+				shown = '<b>----- %s -----</b><br>%s' % (thisDate, shown)
+			lastDate = thisDate
 			show.append(shown)
 		html += '<br>'.join(show)
 		self.messages.setHtml(html)

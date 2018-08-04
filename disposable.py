@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata, urllib2, struct
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata, urllib2, struct, ctypes
 from PyQt4 import QtCore, QtGui, uic
 from pygame import mixer
 from threading import Thread
@@ -763,6 +763,13 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.installEventFilter(self)
 		self.isFocused = True
 		self.iconChangedBecauseOfFocus = False
+
+		# This will fix the window icon in Windows
+		# Thanks to: https://stackoverflow.com/questions/1551605/how-to-set-applications-taskbar-icon-in-windows-7/1552105#1552105
+		try:
+			ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(u'DISPOSABLE')
+		except:
+			pass
 
 		self.loadIdentities()
 

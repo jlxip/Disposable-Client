@@ -372,7 +372,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT, ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
 			messages.append(i)
 
-		html = ''
+		html = '<style>* { font-family: monospace; }</style>\n'	# This makes monospaced font work in Windows
 		show = []
 		for i in messages:
 			# Before 'You' was self.ALIAS, but that might be confusing to the user.

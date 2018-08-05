@@ -758,7 +758,6 @@ class identitytab(QtGui.QWidget, identity_ui):
 			msg.setIcon(QtGui.QMessageBox.Critical)
 			msg.setText('The given identity hash doesn\'t exist in the node.')
 			msg.exec_()
-			self.close()
 			return
 
 		cursor.execute("INSERT INTO CHATS (ME, THEY, ALIAS, LAST) VALUES (?, ?, ?, ?)", (self.ME, THEY, THEY.upper()[:8], time.time()))

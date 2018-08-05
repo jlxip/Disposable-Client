@@ -688,7 +688,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 		menu.exec_(QtGui.QCursor.pos())
 
 	def showhash(self, selected_CID):
-		identityhash(self, selected_CID).show()
+		identityhash(self, selected_CID, self.NODE).show()
 
 	def renamechat(self, selected_CID):
 		ALIAS = unicode(QtGui.QInputDialog.getText(self, 'Rename chat', 'Enter the new name:')[0].toUtf8(), encoding='utf-8')

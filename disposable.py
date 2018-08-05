@@ -13,7 +13,6 @@ identity_ui = uic.loadUiType(UIdirectory+'identity.ui')[0]
 invalid_ui = uic.loadUiType(UIdirectory+'invalid.ui')[0]
 identityhash_ui = uic.loadUiType(UIdirectory+'identityhash.ui')[0]
 sendfile_ui = uic.loadUiType(UIdirectory+'sendfile.ui')[0]
-downloadingdialog_ui = uic.loadUiType(UIdirectory+'downloading.ui')[0]
 managenodes_ui = uic.loadUiType(UIdirectory+'managenodes.ui')[0]
 newidentity_ui = uic.loadUiType(UIdirectory+'newidentity.ui')[0]
 
@@ -230,11 +229,6 @@ class managenodes(QtGui.QDialog, managenodes_ui):
 		# Update the list of nodes
 		self.updateNodes()
 
-class downloadingdialog(QtGui.QDialog, downloadingdialog_ui):
-	def __init__(self, parent):
-		super(downloadingdialog, self).__init__(parent)
-		self.setupUi(self)
-
 def escapeHTMLString(s):
 	return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
@@ -436,11 +430,17 @@ class identitytab(QtGui.QWidget, identity_ui):
 			url = url[:url.index(filename)] + urllib2.quote(filename)
 
 			# Download
-			downloading = downloadingdialog(self)
-			downloading.show()
+			progressDialog = QtGui.QProgressDialog('Downloading...', QtCore.QString('Cancel'), 0, size, self)
+			progressDialog.setWindowTitle('Download')
+			progressDialog.setWindowModality(QtCore.Qt.WindowModal);
 			response = urllib2.urlopen(url)
-			data = response.read()
-			downloading.close()
+			data = ''
+			while True:
+				thisData = response.read(1024)
+				if len(thisData) == 0:
+					break
+				data += thisData
+				progressDialog.setValue(len(data))
 
 			# Decrypt (same procedure as in messageReceived)
 			keylength = struct.unpack('>I', data[:4])[0]

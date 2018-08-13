@@ -603,7 +603,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 			shown = '[%s] &lt;%s&gt; %s' % (datetime.datetime.fromtimestamp(i[0]).strftime('%H:%M'), who, content)
 			thisDate = datetime.datetime.fromtimestamp(i[0]).strftime('%d/%m/%Y')
 			if not thisDate == lastDate:
-				shown = '<b>----- %s -----</b><br>%s' % (thisDate, shown)
+				shown = '<br><b>----- %s -----</b><br>%s' % (thisDate, shown)
 			lastDate = thisDate
 			show.append(shown)
 		html += '<br>'.join(show)

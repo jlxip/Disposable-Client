@@ -30,7 +30,7 @@
        </attribute>
        <layout class="QGridLayout" name="gridLayout_2">
         <item row="0" column="0">
-         <widget class="QLabel" name="label_2">
+         <widget class="QLabel" name="mainimage">
           <property name="font">
            <font>
             <pointsize>15</pointsize>
@@ -85,6 +85,7 @@
     <addaction name="decreasefontsize"/>
     <addaction name="separator"/>
     <addaction name="notificationsound"/>
+    <addaction name="darktheme"/>
    </widget>
    <addaction name="menuIdentity"/>
    <addaction name="menuPreferences"/>
@@ -177,6 +178,14 @@
   <action name="nodes_btn">
    <property name="text">
     <string>Nodes</string>
+   </property>
+  </action>
+  <action name="darktheme">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Dark theme</string>
    </property>
   </action>
  </widget>

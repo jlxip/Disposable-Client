@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- encoding: utf-8 -*-
 
-import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata, urllib2, struct, ctypes
+import socket, os, data, cryptic, sys, base64, hashlib, sqlite3, time, datetime, json, unzalgo, unicodedata, urllib2, struct, ctypes, qdarkstyle
 from PyQt4 import QtCore, QtGui, uic
 from pygame import mixer
 from threading import Thread
@@ -973,6 +973,26 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 		self.increasefontsize.triggered.connect(self.fontsizeplus)
 		self.decreasefontsize.triggered.connect(self.fontsizeminus)
 		self.notificationsound.triggered.connect(self.switchnotification)
+		self.darktheme.triggered.connect(self.switchDarkTheme)
+
+		self.updateChecks()
+
+		# Set the dark-themed image in case it is chosen
+		if PREFERENCES['dark']:
+			self.mainimage.setPixmap(QtGui.QPixmap(':/MainImage/DarkThemed.png'))
+
+	def updateChecks(self):
+		self.notificationsound.setChecked(PREFERENCES['notification'])
+		self.darktheme.setChecked(PREFERENCES['dark'])
+
+	def switchDarkTheme(self):
+		PREFERENCES['dark'] = not PREFERENCES['dark']
+		self.writePreferences()
+
+		msg = QtGui.QMessageBox()
+		msg.setIcon(QtGui.QMessageBox.Information)
+		msg.setText('Please, restart Disposable to apply the changes.')
+		msg.exec_()
 
 	def managenodes(self):
 		managenodes(self).show()
@@ -1044,7 +1064,6 @@ class mainwindow(QtGui.QMainWindow, mainwindow_fc):
 
 	def newidentity(self):
 		newidentity(self).show()
-		#self.loadIdentities()
 
 	def tabChanged(self):
 		i = self.identitiestab.currentIndex()
@@ -1141,7 +1160,8 @@ if __name__ == '__main__':
 	global PREFERENCES
 	PREFERENCES = {
 		'font-size': 11,
-		'notification': True
+		'notification': True,
+		'dark': False
 	}
 	if os.path.isfile('preferences.dat'):
 		with open('preferences.dat', 'r') as f:
@@ -1164,6 +1184,10 @@ if __name__ == '__main__':
 		thisNode = connectToNode(i[0], i[1], i[2])
 		data.send_msg(thisNode, '\x00')
 		thisNode.close()
+
+	# Set the theme
+	if PREFERENCES['dark']:
+		app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt())
 
 	# Show the window
 	w.show()

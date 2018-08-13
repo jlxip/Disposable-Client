@@ -14,13 +14,13 @@ There are no users in Disposable, but **identities**. These are shared via a 32-
 An identity in the node A cannot connect to another one in the node B. But you can have as many identities as you want from any of the nodes.
 
 ## Installation
-First, you need to have installed Python 2.7 (Click [here](https://www.python.org/downloads/) for Windows, in GNU/Linux is installed by default), as well as some dependencies: PyCrypto, PyQt4, PyGame and Numpy.
+First, you need to have installed Python 2.7 (Click [here](https://www.python.org/downloads/) for Windows, in GNU/Linux is installed by default), as well as some dependencies: PyCrypto, PyQt4, PyGame, Numpy and qdarkstyle.
 
 ### GNU/Linux
 In Debian-based GNU/Linux distributions, you can install them easily with the following commands:
 ```
 sudo apt install python-crypto python-qt4
-sudo pip install pygame numpy
+sudo pip install pygame numpy qdarkstyle
 ```
 
 ### Windows
@@ -59,10 +59,10 @@ Finally, in the directory of the download, run:
 C:\Python27\Scripts\pip.exe install PyQt4[Tab]
 ```
 
-And install PyGame and Numpy as well:
+And install PyGame, Numpy and qdarkstyle as well:
 
 ```
-C:\Python27\Scripts\pip.exe install pygame numpy
+C:\Python27\Scripts\pip.exe install pygame numpy qdarkstyle
 ```
 
 If you run Disposable now, there might be an issue with file transfers in Windows. This is because Windows lacks the Let's Encrypt certificate in its certificate store. You can fix this by installing the Let's Encrypt certificate. Go [here](https://transfer.sh), and follow these instructions:

@@ -551,13 +551,16 @@ class identitytab(QtGui.QWidget, identity_ui):
 			content = i[2]
 			if content[:6] == '[_F_]!':
 				# It's a file to download.
-				try:
-					SIZE = sizeToString(int(content[6:].split('|')[0]))
-					URL = content[6:].split('|')[1]
-					FILENAME = escapeHTMLString(urllib2.unquote(URL.split('/')[-1]))
-					content = '<a href=\''+content+'|'+str(i[3])+'\'>Download "'+FILENAME+'" ('+SIZE+')</a>'
-				except:
-					content = '<i>This message is poorly formatted. Maybe you are using an old version of Disposable.</i>'
+				if time.time() > i[0]+(60*60*24*14):
+					content = '<i>This file has expired. Ask the user to send it again.</i>'
+				else:
+					try:
+						SIZE = sizeToString(int(content[6:].split('|')[0]))
+						URL = content[6:].split('|')[1]
+						FILENAME = escapeHTMLString(urllib2.unquote(URL.split('/')[-1]))
+						content = '<a href=\''+content+'|'+str(i[3])+'\'>Download "'+FILENAME+'" ('+SIZE+')</a>'
+					except:
+						content = '<i>This message is poorly formatted. Maybe you are using an old version of Disposable.</i>'
 			elif content[:7] == '[_FR_]!':
 				# It's a downloaded file.
 				try:

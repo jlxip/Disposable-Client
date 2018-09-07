@@ -1,11 +1,11 @@
 # Disposable
 
-![Logo](https://git.jlxip.net/jlxip/Disposable-Client/raw/2b131144d2a31c8a72e41fae89f567ebe87855d4/UI/MainImage/256x256.png)
+![Logo](https://raw.githubusercontent.com/jlxip/Disposable-Client/master/UI/MainImage/MainImage.png)
 
 ## The basics
 **Disposable is an anonymous, cryptographically secure, semi-decentralized and multiplatform instant messaging program written in Python.**
 
-It's based on nodes, which act as intermediaries between clients. These nodes are in charge of delievering the encrypted messages, [and can run one if you want](https://git.jlxip.net/jlxip/Disposable-Node), that's what makes Disposable semi-decentralized. The clients and the nodes share a common protocol, specifically designed for keeping the transmission anonymous and encrypted, with some clever security protections that make Man In The Middle attacks and malicious nodes impossible to run. If you are interested in the protocol, have a look at the node README. You should have a VPN running in order to keep your IP safe from the node you're connecting to, in case it has been _hacked_ to keep logs.
+It's based on nodes, which act as intermediaries between clients. These nodes are in charge of delievering the encrypted messages, [and can run one if you want](https://github.com/jlxip/Disposable-Node), that's what makes Disposable semi-decentralized. The clients and the nodes share a common protocol, specifically designed for keeping the transmission anonymous and encrypted, with some clever security protections that make Man In The Middle attacks and malicious nodes impossible to run. If you are interested in the protocol, have a look at the node README. You should have a VPN running in order to keep your IP safe from the node you're connecting to, in case it has been _hacked_ to keep logs.
 
 To connect to a node, you have to get its node connection file via a secure channel (such as HTTPS). It will be required when creating a new identity. There's an official Disposable node, whose file you can download [here](https://jlxip.net/node.dat).
 

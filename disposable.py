@@ -468,6 +468,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 			# Update messages
 			self.updateMessages()
+
 		elif url[:4] == 'COPY':
 			for i in cursor.execute("SELECT NAME, CONTENT FROM FILES WHERE ID=?", (url[4:],)):
 				filename = i[0]
@@ -497,6 +498,11 @@ class identitytab(QtGui.QWidget, identity_ui):
 			# Update messages
 			self.updateMessages()
 
+		elif url == 'LOADMORE':
+			# Show more messages.
+			self.chats[self.chatslist.selectedIndexes()[0].row()][3] += 50
+			self.updateMessages(scroll=False)
+
 	def sendfileclicked(self):
 		selected = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		sendfile(self, selected[1], selected[2]).show()
@@ -516,7 +522,10 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.sendfile_btn.setEnabled(True)
 
 		if self.chats[selected][0] in UNREAD_CHATS:
-			UNREAD_CHATS.pop(selected)
+			try:
+				UNREAD_CHATS.pop(selected)
+			except:
+				pass
 			self.updateChatsList()
 
 		areAllChatsRead = True
@@ -530,7 +539,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 		self.updateMessages()
 
-	def updateMessages(self):
+	def updateMessages(self, scroll=True):
 		selected = self.chats[self.chatslist.selectedIndexes()[0].row()]
 		chat = selected[0]
 
@@ -539,10 +548,18 @@ class identitytab(QtGui.QWidget, identity_ui):
 		cursor = DB.cursor()
 		messages = []
 		# WARNING: IT NEEDS A FUCKING LIMIT
-		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT, ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP ASC", (self.ME, chat)):
+		for i in cursor.execute("SELECT TIMESTAMP, WHO, CONTENT, ID FROM MESSAGES WHERE ME=? AND THEY=? ORDER BY TIMESTAMP DESC LIMIT ?",
+			(self.ME, chat, selected[3]+1)):
 			messages.append(i)
 
+		messages = messages[::-1]	# As the messages are ordered by timestamp desc (from newer to older), the array has to be turned around.
+
 		html = '<style>* { font-family: monospace; }</style>\n'	# This makes monospaced font work in Windows
+
+		# If the length of messages is greater than selected[2], there are messages unshown.
+		if len(messages) > selected[3]:
+			html += '<a href=\'LOADMORE\'><b>- Load previous messages -</b></a><br>'
+
 		show = []
 		lastDate = ''
 		for i in messages:
@@ -610,8 +627,9 @@ class identitytab(QtGui.QWidget, identity_ui):
 		self.messages.setHtml(html)
 
 		# Scroll to the bottom
-		self.messages.moveCursor(QtGui.QTextCursor.End)
-		self.messages.ensureCursorVisible()
+		if scroll:
+			self.messages.moveCursor(QtGui.QTextCursor.End)
+			self.messages.ensureCursorVisible()
 
 	def updateChatsList(self):
 		# Get the currently selected chat, so that it can be kept
@@ -659,6 +677,7 @@ class identitytab(QtGui.QWidget, identity_ui):
 
 			# Append to the list
 			self.chats[i].append(PUB)
+			self.chats[i].append(50)	# This number is the current limit of messages to be shown.
 
 		model = QtGui.QStandardItemModel()
 		for i in self.chats:
